@@ -213,7 +213,7 @@
 $databases = array();
 $databases['default']['default'] = array(
   'driver' => 'mysql',
-  'database' => 'pde_chapter_N',
+  'database' => 'pde_chapter_06',
   'username' => 'drupal_entities',
   'password' => 'W43wSu4Ym44K',
   'host' => 'localhost',
