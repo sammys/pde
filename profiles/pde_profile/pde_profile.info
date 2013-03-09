@@ -3,5 +3,7 @@ description = "Base installation for Programming Drupal Entities: Chapter 2."
 version = 7.x-1.0
 core = 7.x
 dependencies[] = admin_menu
+dependencies[] = block
 dependencies[] = devel
 dependencies[] = entity
+dependencies[] = pde_02
