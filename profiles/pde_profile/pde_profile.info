@@ -5,3 +5,4 @@ core = 7.x
 dependencies[] = admin_menu
 dependencies[] = devel
 dependencies[] = entity
+dependencies[] = pde_02
