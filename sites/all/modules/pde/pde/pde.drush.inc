@@ -26,7 +26,7 @@ function pde_drush_command() {
     'description' => 'Prints an entity.',
     'arguments' => array(
       'entity' => 'Entity ID.',
-      'type' => 'Entity type.'
+      'type' => 'Entity type.',
     ),
     'aliases' => array('pe'),
     'required-arguments' => 1,
@@ -35,8 +35,8 @@ function pde_drush_command() {
   $items['dump-entity-properties'] = array(
     'description' => "Output a dump of an entity's property information.",
     'arguments' => array(
+      'type' => 'Entity type.',
       'entity' => 'Entity ID.',
-      'type' => 'Entity type.'
     ),
     'aliases' => array('dep'),
     'required-arguments' => 1,
@@ -54,7 +54,7 @@ function pde_drush_command() {
     'description' => 'Create an entity.',
     'arguments' => array(
       'type' => 'Entity type',
-      'data' => 'Data to use for the new entity.'
+      'data' => 'Data to use for the new entity.',
     ),
     'examples' => array(
       'drush entity-create ingredient \'{"name": "Salt"}\'' => dt('Creates an ingredient entity named "Salt" and displays the properties of the new entity.'),
@@ -167,23 +167,20 @@ function drush_pde_print_entity($entity, $type = NULL) {
  * Print the property names and values of the entity with the
  * given type and ID.
  *
- * @param $entity
- *   Either the identifier of the entity, an Entity object or an
- *   EntityMetadataWrapper object.
  * @param $type
- *   Type of the entity. Only needed if $id
- * @return
- *   Table output or, if unsucessful, returns FALSE.
+ *   Entity type.
+ * @param $id
+ *   Entity ID.
  */
-function drush_pde_dump_entity_properties($entity, $type = NULL) {
+function drush_pde_dump_entity_properties($type, $id) {
   // Convert anything we're given into a wrapper object
-  $wrapper = _pde_assert_wrapper($entity, $type);
+  $wrapper = _pde_assert_wrapper($id, $type);
   if (!is_object($wrapper)) {
     // A non-object means a wrapper was not possible
     return $wrapper;
   }
 
-  var_dump($wrapper->getPropertyInfo());
+  drush_print_r($wrapper->getPropertyInfo());
 }
 
 /**
