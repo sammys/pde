@@ -32,6 +32,16 @@ function pde_drush_command() {
     'required-arguments' => 1,
   ) + $defaults;
 
+  $items['dump-entity-properties'] = array(
+    'description' => "Output a dump of an entity's property information.",
+    'arguments' => array(
+      'entity' => 'Entity ID.',
+      'type' => 'Entity type.'
+    ),
+    'aliases' => array('dep'),
+    'required-arguments' => 1,
+  ) + $defaults;
+
   $items['print-table'] = array(
     'description' => 'Prints the contents of a database table.',
     'arguments' => array(
@@ -151,6 +161,29 @@ function drush_pde_print_entity($entity, $type = NULL) {
   $tbl = drush_print_table($table, TRUE, array(), $handle);
 
   return $header."\n\n".$tbl->getTable();
+}
+
+/**
+ * Print the property names and values of the entity with the
+ * given type and ID.
+ *
+ * @param $entity
+ *   Either the identifier of the entity, an Entity object or an
+ *   EntityMetadataWrapper object.
+ * @param $type
+ *   Type of the entity. Only needed if $id
+ * @return
+ *   Table output or, if unsucessful, returns FALSE.
+ */
+function drush_pde_dump_entity_properties($entity, $type = NULL) {
+  // Convert anything we're given into a wrapper object
+  $wrapper = _pde_assert_wrapper($entity, $type);
+  if (!is_object($wrapper)) {
+    // A non-object means a wrapper was not possible
+    return $wrapper;
+  }
+
+  var_dump($wrapper->getPropertyInfo());
 }
 
 /**
