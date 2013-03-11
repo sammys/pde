@@ -6,4 +6,3 @@ dependencies[] = admin_menu
 dependencies[] = block
 dependencies[] = devel
 dependencies[] = entity
-dependencies[] = pde_02
