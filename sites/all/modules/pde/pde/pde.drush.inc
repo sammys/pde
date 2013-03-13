@@ -32,6 +32,14 @@ function pde_drush_command() {
     'required-arguments' => 1,
   ) + $defaults;
 
+  $items['dump-entity-info'] = array(
+    'description' => "Output a dump of an entity type's information.",
+    'arguments' => array(
+      'type' => 'Entity type.',
+    ),
+    'aliases' => array('dei'),
+  ) + $defaults;
+
   $items['dump-entity-properties'] = array(
     'description' => "Output a dump of an entity's property information.",
     'arguments' => array(
@@ -164,23 +172,41 @@ function drush_pde_print_entity($entity, $type = NULL) {
 }
 
 /**
+ * Print the entity information of the given entity type.
+ *
+ * @param $type
+ *   Entity type.
+ */
+function drush_pde_dump_entity_info($type) {
+  $info = entity_get_info($type);
+  drush_print_r($info);
+}
+
+/**
  * Print the property names and values of the entity with the
  * given type and ID.
  *
  * @param $type
  *   Entity type.
  * @param $id
- *   Entity ID.
+ *   Entity ID. If not given the entity property information of
+ *   the entity type will be printed instead.
  */
-function drush_pde_dump_entity_properties($type, $id) {
-  // Convert anything we're given into a wrapper object
-  $wrapper = _pde_assert_wrapper($id, $type);
-  if (!is_object($wrapper)) {
-    // A non-object means a wrapper was not possible
-    return $wrapper;
+function drush_pde_dump_entity_properties($type, $id = NULL) {
+  if (!isset($id)) {
+    $info = entity_get_property_info($type);
+    drush_print_r($info);
   }
+  else {
+    // Convert anything we're given into a wrapper object
+    $wrapper = _pde_assert_wrapper($id, $type);
+    if (!is_object($wrapper)) {
+      // A non-object means a wrapper was not possible
+      return $wrapper;
+    }
 
-  drush_print_r($wrapper->getPropertyInfo());
+    drush_print_r($wrapper->getPropertyInfo());
+  }
 }
 
 /**
