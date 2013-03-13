@@ -1,0 +1,7 @@
+name = Recipe
+description = Collect and display recipes.
+package = Recipe
+dependencies[] = entity
+core = 7.x
+
+configure = admin/config/system/recipe
