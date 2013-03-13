@@ -565,4 +565,4 @@ $conf['404_fast_html'] = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML+RDFa 1.0//EN"
  * Programming Drupal Entities
  */
 $conf['site_name'] = 'Programming Drupal Entities';
-$conf['site_slogan'] = '';
+$conf['site_slogan'] = 'Chapter 3';
