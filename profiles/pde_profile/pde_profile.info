@@ -7,3 +7,4 @@ dependencies[] = block
 dependencies[] = devel
 dependencies[] = entity
 dependencies[] = recipe
+dependencies[] = taxonomy
