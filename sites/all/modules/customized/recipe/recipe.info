@@ -2,6 +2,7 @@ name = Recipe
 description = Collect and display recipes.
 package = Recipe
 dependencies[] = entity
+dependencies[] = taxonomy
 core = 7.x
 
 configure = admin/config/system/recipe

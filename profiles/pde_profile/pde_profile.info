@@ -1,8 +1,9 @@
 name = "Programming Drupal Entities"
-description = "Base installation for Programming Drupal Entities: Chapter 2."
-version = 7.x-1.0
+description = "Base installation for Programming Drupal Entities: Chapter 4."
+version = 7.x-1.4
 core = 7.x
 dependencies[] = admin_menu
 dependencies[] = block
 dependencies[] = devel
 dependencies[] = entity
+dependencies[] = recipe
