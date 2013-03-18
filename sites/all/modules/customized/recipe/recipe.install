@@ -402,6 +402,7 @@ function recipe_update_7004() {
  */
 function recipe_install() {
   recipe_install_vocabularies();
+  recipe_install_terms();
 }
 
 /**
@@ -411,18 +412,7 @@ function recipe_install() {
  *   that failed.
  */
 function recipe_install_vocabularies() {
-  $vocabularies = array(
-    array(
-      'name' => 'Cuisine',
-      'machine_name' => 'cuisine',
-      'description' => 'Contains terms representing different cuisines.',
-    ),
-    array(
-      'name' => 'Difficulty',
-      'machine_name' => 'difficulty',
-      'description' => 'Contains terms representing difficulty levels.',
-    ),
-  );
+  $vocabularies = recipe_vocabularies();
   foreach ($vocabularies as $vdata) {
     // Make sure we're not overwriting existing vocabularies
     $v = taxonomy_vocabulary_machine_name_load($vdata['machine_name']);
@@ -435,6 +425,77 @@ function recipe_install_vocabularies() {
   return FALSE;
 }
 
+function recipe_install_terms() {
+  foreach (array_keys(recipe_vocabularies()) as $machine_name) {
+    $v = taxonomy_vocabulary_machine_name_load($machine_name);
+    $wrapper = entity_metadata_wrapper('taxonomy_vocabulary', $v);
+    if ($wrapper->term_count->value() == 0) {
+      $path = drupal_get_path('module', 'recipe') . '/includes/terms_' . $v->machine_name . '.txt';
+      $lines = file($path, FILE_SKIP_EMPTY_LINES);
+      recipe_install_term_tree($wrapper, $lines);
+    }
+  }
+}
+
+/**
+ * Installs a term tree.
+ * @param $vwrapper
+ *   EntityMetadataWrapper of a taxonomy_vocabulary entity.
+ * @param $lines
+ *   Array of lines from the term text file. The iterator must be set to
+ *   the line to parse.
+ * @param $last
+ *   Either NULL or the parent term ID.
+ * @param $depth
+ *   Current depth of the tree.
+ */
+function recipe_install_term_tree($vwrapper, &$lines, $last = NULL, $depth = 0) {
+  $wrapper = NULL;
+
+  while ($line = current($lines)) {
+    $name = trim($line);
+    $line_depth = max(strlen($line) - strlen($name) - 1, 0);
+
+    if ($line_depth < $depth) {
+      return;
+    }
+    else if ($line_depth > $depth) {
+      recipe_install_term_tree($vwrapper, $lines, $wrapper ? $wrapper->tid->value() : NULL, $depth + 1);
+    }
+    else {
+      $data = array(
+        'name' => $name,
+        'vid' => $vwrapper->vid->value(),
+        'parent' => array($last ? $last : 0),
+      );
+      $term = entity_create('taxonomy_term', $data);
+      $wrapper = entity_metadata_wrapper('taxonomy_term', $term);
+      $wrapper->save();
+      next($lines);
+    }
+  }
+}
+
+/**
+ * Return the default vocabulary information.
+ */
+function recipe_vocabularies() {
+  $vocabularies = array(
+    'cuisine' => array(
+      'name' => 'Cuisine',
+      'machine_name' => 'cuisine',
+      'description' => 'Contains terms representing different cuisines.',
+    ),
+    'difficulty' => array(
+      'name' => 'Difficulty',
+      'machine_name' => 'difficulty',
+      'description' => 'Contains terms representing difficulty levels.',
+    ),
+  );
+
+  return $vocabularies;
+}
+
 /**
  * Installs default vocabularies introduced in 7.x-2.x.
  */
@@ -442,4 +503,11 @@ function recipe_update_7200(&$sandbox) {
   if ($machine_name = recipe_install_vocabularies()) {
     throw new DrupalUpdateException('Error occurred when attempting to create vocabulary: '.$machine_name);
   }
+}
+
+/**
+ * Installs terms into default vocabularies.
+ */
+function recipe_update_7201(&$sandbox) {
+  recipe_install_terms();
 }
