@@ -403,6 +403,7 @@ function recipe_update_7004() {
 function recipe_install() {
   recipe_install_vocabularies();
   recipe_install_terms();
+  recipe_install_fields();
 }
 
 /**
@@ -497,6 +498,46 @@ function recipe_vocabularies() {
 }
 
 /**
+ * Install fields for recipe term references.
+ */
+function recipe_install_fields() {
+  foreach (recipe_vocabularies() as $machine_name => $info) {
+    $field_name = 'term_' . $machine_name;
+    $field = array(
+      'field_name' => $field_name,
+      'type' => 'taxonomy_term_reference',
+      'settings' => array(
+        'allowed_values' => array(
+          array(
+            'vocabulary' => $machine_name,
+            'parent' => 0
+          ),
+        ),
+      ),
+    );
+
+    field_create_field($field);
+
+    $instance = array(
+      'field_name' => $field_name,
+      'entity_type' => 'node',
+      'label' => $info['name'],
+      'bundle' => 'test',
+      'required' => true,
+      'widget' => array(
+        'type' => 'options_select'
+      ),
+      'display' => array(
+        'default' => array('type' => 'hidden'),
+        'teaser' => array('type' => 'hidden')
+      )
+    );
+
+    field_create_instance($instance);
+  }
+}
+
+/**
  * Installs default vocabularies introduced in 7.x-2.x.
  */
 function recipe_update_7200(&$sandbox) {
@@ -510,4 +551,11 @@ function recipe_update_7200(&$sandbox) {
  */
 function recipe_update_7201(&$sandbox) {
   recipe_install_terms();
+}
+
+/**
+ * Installs terms into default vocabularies.
+ */
+function recipe_update_7202(&$sandbox) {
+  recipe_install_fields();
 }
