@@ -6,4 +6,5 @@ dependencies[] = admin_menu
 dependencies[] = block
 dependencies[] = devel
 dependencies[] = entity
+dependencies[] = field_ui
 dependencies[] = recipe
