@@ -496,7 +496,7 @@ function recipe_install_term_tree($vwrapper, &$lines,
       return;
     }
     else if ($line_depth > $depth) {
-      $tid = $wrapper ? $wrapper->tid->value() ;
+      $tid = $wrapper ? $wrapper->tid->value() : NULL;
       recipe_install_term_tree($vwrapper, $lines, $tid, $depth+1);
     }
     else {
