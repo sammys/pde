@@ -403,7 +403,6 @@ function recipe_update_7004() {
 function recipe_install() {
   recipe_install_vocabularies();
   recipe_install_terms();
-  recipe_install_fields();
 }
 
 /**
@@ -519,4 +518,3 @@ function recipe_install_term_tree($vwrapper, &$lines,
 function recipe_update_7201(&$sandbox) {
   recipe_install_terms();
 }
-
