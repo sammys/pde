@@ -403,6 +403,7 @@ function recipe_update_7004() {
 function recipe_install() {
   recipe_install_vocabularies();
   recipe_install_terms();
+  recipe_install_fields();
 }
 
 /**
@@ -517,4 +518,139 @@ function recipe_install_term_tree($vwrapper, &$lines,
  */
 function recipe_update_7201(&$sandbox) {
   recipe_install_terms();
+}
+
+/**
+ * Install fields for recipe nodes.
+ */
+function recipe_install_fields() {
+  // field conversions
+  module_load_include('inc', 'recipe', 'recipe.field');
+
+  // Get info we will need to put fields into the same place
+  // they were in the non-field implementation
+  $winfo = field_info_extra_fields('node', 'recipe', 'form');
+  $dinfo = field_info_extra_fields('node', 'recipe', 'display');
+
+  foreach (recipe_field_default_fields() as $info) {
+    $field_name = $info['field_config']['field_name'];
+    $instance = &$info['field_instance'];
+
+    // Don't install this twice
+    if (field_info_instance('node', $field_name, 'recipe')) {
+      continue;
+    }
+
+    // Set the weight of the field in all display modes
+    if (isset($dinfo[$field_name]['display'])) {
+      foreach ($dinfo[$field_name]['display'] as $view_mode => $settings) {
+        $instance['display'][$view_mode]['weight'] = $settings['weight'];
+      }
+    }
+
+    // Set the weight of the editing widget
+    if (isset($winfo[$field_name])) {
+      $instance['widget']['weight'] = $winfo[$field_name]['weight'];
+    }
+
+    // Add the field to the recipe content type
+    field_create_field($info['field_config']);
+    field_create_instance($instance);
+  }
+
+  // term reference fields
+  foreach (recipe_vocabularies() as $machine_name => $info) {
+    $field_name = 'term_' . $machine_name;
+
+    if (field_info_instance('node', $field_name, 'recipe')) {
+      continue;
+    }
+    $field = array(
+      'field_name' => $field_name,
+      'type' => 'taxonomy_term_reference',
+      'settings' => array(
+        'allowed_values' => array(
+          array(
+            'vocabulary' => $machine_name,
+            'parent' => 0
+          ),
+        ),
+      ),
+    );
+
+    field_create_field($field);
+
+    $instance = array(
+      'field_name' => $field_name,
+      'entity_type' => 'node',
+      'label' => $info['name'],
+      'bundle' => 'recipe',
+      'required' => true,
+      'widget' => array(
+        'type' => 'options_select'
+      ),
+      'display' => array(
+        'default' => array('type' => 'hidden'),
+        'teaser' => array('type' => 'hidden')
+      )
+    );
+
+    field_create_instance($instance);
+  }
+
+  variable_set('recipe_fields_installed', TRUE);
+}
+
+/**
+ * Install fields needed by recipe module.
+ */
+function recipe_update_7202(&$sandbox) {
+  recipe_install_fields();
+}
+
+/**
+ * Migrates recipe data from old schema into fields.
+ */
+function recipe_update_7203(&$sandbox) {
+  if (!isset($sandbox['progress'])) {
+    $sandbox['progress'] = 0;
+    $sandbox['current_nid'] = 0;
+    $sandbox['max']
+      = db_query(
+        "SELECT COUNT(DISTINCT nid) FROM {node} WHERE type = :type",
+        array(':type' => 'recipe')
+      )->fetchField();
+
+  }
+
+  $query = db_select('node', 'n');
+  $query->join('recipe', 'r', 'n.nid = r.nid');
+  $query->fields('r')
+    ->condition('n.type', 'recipe')
+    ->range($sandbox['progress'], 10);
+  $result = $query->execute();
+
+  foreach ($result as $record) {
+    $sandbox['current_nid'] = $record->nid;
+    $nwrapper = entity_metadata_wrapper('node', $record->nid);
+
+    if (valid_url($record->source, TRUE)) {
+      // Put the URL into the link field
+      $nwrapper->field_source_link->url = $record->source;
+    }
+    $nwrapper->field_source = $record->source;
+    $nwrapper->field_yield = $record->yield;
+    $nwrapper->field_yield_unit = $record->yield_unit;
+    $nwrapper->field_description->value = $record->description;
+    $nwrapper->instructions->value = $record->instructions;
+    $nwrapper->field_notes->value = $record->notes;
+    $nwrapper->field_preptime = $record->preptime;
+    $nwrapper->field_cooktime = $record->cooktime;
+
+    $sandbox['progress']++;
+  }
+
+  $sandbox['#finished']
+    = empty($sandbox['max'])
+      ? TRUE : ($sandbox['progress'] / $sandbox['max']);
 }

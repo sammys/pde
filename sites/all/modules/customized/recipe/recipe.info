@@ -3,6 +3,10 @@ description = Collect and display recipes.
 package = Recipe
 dependencies[] = entity
 dependencies[] = taxonomy
+dependencies[] = link
+dependencies[] = number
+dependencies[] = text
+dependencies[] = token
 core = 7.x
 
 configure = admin/config/system/recipe
