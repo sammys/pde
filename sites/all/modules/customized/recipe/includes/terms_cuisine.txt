@@ -1,0 +1,213 @@
+African
+	Central African
+		Cameroon
+		Congo
+	East African
+		Burundi
+		Kenya
+		Maasai
+		Tanzania
+		Uganda
+	Horn African
+		Eritrea
+		Ethiopia
+		Somalia
+	North African
+		Algeria
+		Egypt
+		Libya
+		Morocco
+		Sudan
+		Tunisia
+	Southern African
+		Botswana
+		Madagascar
+		Mauritius
+		Namibia
+		South Africa
+		Zimbabwe
+	West African
+		Burkina Faso
+		Ghana
+		Ivory Coast
+		Nigeria
+		Senegal
+		Sierra Leone
+Asian
+	Central Asian
+		Afghanistan
+		Kazakhstan
+		Kyrgyzstan
+		Mongolia
+		Tajikistan
+		Tibet
+		Turkmenistan
+		Uzbekistan
+		Xinjiang
+	East Asian
+		China
+		Korea
+		Japan
+		Taiwan
+	South Asian
+		Bangladesh
+		Bhutan
+		Maldives
+		Nepal
+		Pakistan
+		Sri Lanka
+		India
+	Southeast Asian
+		Burma
+		Cambodia
+		Indonesia
+		Laos
+		Malaysia
+		Philippines
+		Singapore
+		Thailand
+		Vietnam
+	West Asian
+		Middle East
+			Assyria
+			Iran
+			Iraq
+		Arab
+			Bahrain
+			Kuwait
+			Oman
+			Qatar
+			Saudi Arabia
+			United Arab Emirates
+			Yemen
+		Levant
+			Turkey
+			Syria
+			Jordan
+			Lebanon
+			Palestine
+			Israel
+European
+	Central European
+		Austria
+		Czech Republic
+		Hungary
+		Moldova
+		Poland
+		Romania
+		Slovenia
+		Slovakia
+	Eastern European
+		Belarusia
+		Russia
+		Ukraine
+		Armenia
+		Azerbaijani
+		Georgia
+		Estonia
+		Latvia
+		Lithuania
+	Southern European
+		Balkans
+			Albania
+			Bosnia
+			Bulgaria
+			Croatia
+			Greece
+			Macedonia
+			Montenegro
+			Serbia
+		Mediterranean
+			Cyprus
+			Italy
+			Malta
+			San Marino
+			Gibralta
+			Portugal
+			Spain
+	Northern European
+		British Isles
+			England
+			Ireland
+			Saint Helena
+			Scotland
+			Wales
+		Scandinavian
+			Denmark
+			Finland
+			Iceland
+			Lappland
+			Norway
+			Sweden
+	Western European
+		Belgium
+		Netherlands
+		France
+		Germany
+			Bavaria
+		Luxembourg
+		Switzerland
+North American
+	Canada
+		Quebec
+		Toronto
+	Mexico
+	USA
+		Midwestern American
+			Omaha
+		Northeastern American
+			New England
+			New York City
+			Philadelphia
+		Southern American
+			Cajun
+			Floribbean
+			Kentucky
+			Louisiana
+			Lowcountry
+		Southwestern American
+			New Mexico
+			Tex-Mex
+		Western American
+			California
+			Hawaii
+			Pacific Northwest
+Oceanian
+	Australian
+	Mariana Islands
+	New Zealand
+	Palauan
+	Samoan
+	Tongan
+Latin American
+	Central American
+		Belize
+		Costa Rica
+		El Salvador
+		Guatemala
+		Honduras
+		Nicaragua
+		Panama
+	Caribbean
+		Antigua and Barbuda
+		Cuba
+		Curaçao
+		Dominica
+		Dominican Republic
+		Grenada
+		Guyana
+		Haiti
+		Jamaica
+		Puerto Rico
+		Saint Kitts and Nevis
+		Trinidad and Tobago
+		Martinique and Guadeloupe
+	South American
+		Argentina
+		Brazil
+		Chile
+		Colombia
+		Ecuador
+		Peru
+		Uruguay
+		Venezuela
