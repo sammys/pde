@@ -151,6 +151,12 @@ function recipe_node_info() {
   );
 }
 
+/**
+ * Implementation of hook_form().
+ */
+function recipe_form($node, $form_state) {
+  return node_content_form($node, $form_state);
+}
 
 /**
  * Implementation of hook_node_update().
