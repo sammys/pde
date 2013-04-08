@@ -371,22 +371,27 @@ function _pde_print_entity_base_table($entity) {
 }
 
 function pde_field_value($field_wrapper) {
-  if ($field_wrapper instanceof EntityListWrapper) {
-    // Handle EntityListWrapper multi-value fields
-    $output = '';
-    foreach ($field_wrapper as $value) {
-      $output .= pde_field_value($value);
+  try {
+    if ($field_wrapper instanceof EntityListWrapper) {
+      // Handle EntityListWrapper multi-value fields
+      $output = '';
+      foreach ($field_wrapper as $value) {
+        $output .= pde_field_value($value);
+      }
+    }
+    else if ($field_wrapper instanceof EntityDrupalWrapper) {
+      $output = pde_entity_value($field_wrapper);
+    }
+    else if ($field_wrapper instanceof EntityStructureWrapper) {
+      $output = pde_structure_value($field_wrapper);
+    }
+    else {
+      $output = pde_output(
+        $field_wrapper->value(array('decode' => TRUE)));
     }
   }
-  else if ($field_wrapper instanceof EntityDrupalWrapper) {
-    $output = pde_entity_value($field_wrapper);
-  }
-  else if ($field_wrapper instanceof EntityStructureWrapper) {
-    $output = pde_structure_value($field_wrapper);
-  }
-  else {
-    $output = pde_output(
-      $field_wrapper->value(array('decode' => TRUE)));
+  catch (EntityMetadataWrapperException $e) {
+    return '';
   }
 
   return $output;
