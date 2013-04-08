@@ -152,13 +152,6 @@ function recipe_node_info() {
 }
 
 /**
- * Implementation of hook_form().
- */
-function recipe_form($node, $form_state) {
-  return node_content_form($node, $form_state);
-}
-
-/**
  * Implementation of hook_node_update().
  * This is for the ingredient node feature.
  * If there is an ingredient with the same name as a node type ingredient, link them.
@@ -471,6 +464,16 @@ function recipe_block_view($delta = '') {
   }
 }
 
+/**
+ * Implementation of hook_form().
+ */
+function recipe_form($node, $form_state) {
+  return node_content_form($node, $form_state);
+}
+
+/**
+ * Implementation of hook_form_FORM_ID_alter().
+ */
 function recipe_form_recipe_node_form_alter(&$form, &$form_state) {
   $form['recipe_ingredients'] = array(
     '#type' => 'fieldset',
@@ -486,7 +489,8 @@ function recipe_form_recipe_node_form_alter(&$form, &$form_state) {
     $node->recipe_ingredients['ing'] = array();
   }
 
-  # Figure out max weight so new ingredients will sort at the bottom by default.
+  // Figure out max weight so new ingredients will sort at the
+  // bottom by default.
   $max_weight = 0;
   foreach ($node->recipe_ingredients['ing'] as $id => $ingredient) {
     if ($max_weight < $ingredient['weight']) {
@@ -502,9 +506,9 @@ function recipe_form_recipe_node_form_alter(&$form, &$form_state) {
     }
   }
 
-  // Weights range from -delta to +delta, so delta should be at least half
-  // of the amount of blocks present. This makes sure all blocks in the same
-  // region get an unique weight.
+  // Weights range from -delta to +delta, so delta should be at least
+  // half of the amount of blocks present. This makes sure all blocks
+  // in the same region get an unique weight.
   $weight_delta = count($node->recipe_ingredients['ing']);
 
   // Container for just the ingredients.
