@@ -527,34 +527,56 @@ function recipe_install_fields() {
   // field conversions
   module_load_include('inc', 'recipe', 'recipe.field');
 
-  // Get info we will need to put fields into the same place
-  // they were in the non-field implementation
-  $winfo = field_info_extra_fields('node', 'recipe', 'form');
-  $dinfo = field_info_extra_fields('node', 'recipe', 'display');
+  // Get info we will need to order fields in the same order
+  // they were in for the legacy implementation
+  $widget_info = array();
+  $display_info = array();
 
-  foreach (recipe_field_default_fields() as $info) {
-    $field_name = $info['field_config']['field_name'];
-    $instance = &$info['field_instance'];
+  $bases = recipe_field_default_field_bases();
+  $instances = recipe_field_default_field_instances();
+
+  foreach ($instances as $instance) {
+    $field_name = &$instance['field_name'];
+    $base = &$bases[$field_name];
+    $entity_type = &$instance['entity_type'];
+    $bundle = &$instance['bundle'];
+    $info_key = $entity_type . '-' . $bundle;
+
+    // Populate $widget_info and $display_info using lazy loading
+    if (!isset($widget_info[$info_key])) {
+      $widget_info[$info_key]
+        = field_info_extra_fields($entity_type, $bundle, 'form');
+    }
+    if (!isset($display_info[$info_key])) {
+      $display_info[$info_key]
+        = field_info_extra_fields($entity_type, $bundle, 'display');
+    }
+    $winfo = $widget_info[$info_key][$field_name]
+      ? $widget_info[$info_key][$field_name] : NULL;
+    $dinfo = $display_info[$info_key][$field_name]['display']
+      ? $display_info[$info_key][$field_name]['display'] : NULL;
 
     // Don't install this twice
-    if (field_info_instance('node', $field_name, 'recipe')) {
+    if (field_info_instance($entity_type, $field_name, $bundle)) {
       continue;
     }
 
     // Set the weight of the field in all display modes
-    if (isset($dinfo[$field_name]['display'])) {
-      foreach ($dinfo[$field_name]['display'] as $view_mode => $settings) {
+    if (isset($dinfo)) {
+      foreach ($dinfo as $view_mode => $settings) {
         $instance['display'][$view_mode]['weight'] = $settings['weight'];
       }
     }
 
     // Set the weight of the editing widget
     if (isset($winfo[$field_name])) {
-      $instance['widget']['weight'] = $winfo[$field_name]['weight'];
+      $instance['widget']['weight'] = $winfo['weight'];
     }
 
-    // Add the field to the recipe content type
-    field_create_field($info['field_config']);
+    // Optionally add the field base
+    if (!field_info_field($field_name)) {
+      field_create_field($base);
+    }
     field_create_instance($instance);
   }
 
