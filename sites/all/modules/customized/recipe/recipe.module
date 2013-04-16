@@ -475,110 +475,122 @@ function recipe_form($node, $form_state) {
  * Implementation of hook_form_FORM_ID_alter().
  */
 function recipe_form_recipe_node_form_alter(&$form, &$form_state) {
-  $form['recipe_ingredients'] = array(
-    '#type' => 'fieldset',
-    '#collapsible' => FALSE,
-    '#title' => t('Ingredients'),
-    '#tree' => TRUE,
-  );
+//   $form['recipe_ingredients'] = array(
+//     '#type' => 'fieldset',
+//     '#collapsible' => FALSE,
+//     '#title' => t('Ingredients'),
+//     '#tree' => TRUE,
+//   );
 
-  // This is the autocomplete callback url.
-  $callback = 'recipe/ingredient/autocomplete';
+//   // This is the autocomplete callback url.
+//   $callback = 'recipe/ingredient/autocomplete';
 
-  if ( empty($node->recipe_ingredients['ing']) || !is_array($node->recipe_ingredients['ing']) ) {
-    $node->recipe_ingredients['ing'] = array();
+//   if ( empty($node->recipe_ingredients['ing']) || !is_array($node->recipe_ingredients['ing']) ) {
+//     $node->recipe_ingredients['ing'] = array();
+//   }
+
+//   // Figure out max weight so new ingredients will sort at the
+//   // bottom by default.
+//   $max_weight = 0;
+//   foreach ($node->recipe_ingredients['ing'] as $id => $ingredient) {
+//     if ($max_weight < $ingredient['weight']) {
+//       $max_weight = $ingredient['weight'];
+//     }
+//   }
+
+//   if (isset($form_state['add_ingredients']) || count($node->recipe_ingredients['ing']) == 0) {
+//     unset($form_state['add_ingredients']);
+//     $add_count = variable_get('recipe_add_more_count', 5);
+//     for ($delta = 0; $delta < $add_count; $delta++) {
+//       array_push($node->recipe_ingredients['ing'], array('ri_id' => NULL, 'quantity' => '', 'unit_key' => '', 'name' => '', 'note' => '', 'weight' => $max_weight + $delta));
+//     }
+//   }
+
+//   // Weights range from -delta to +delta, so delta should be at least
+//   // half of the amount of blocks present. This makes sure all blocks
+//   // in the same region get an unique weight.
+//   $weight_delta = count($node->recipe_ingredients['ing']);
+
+//   // Container for just the ingredients.
+//   $form['recipe_ingredients']['ing'] = array(
+//     '#prefix' => '<div id="ingredients-wrapper">',
+//     '#suffix' => '</div>',
+//     '#theme' => 'ingredients_form',
+//   );
+
+//   foreach ($node->recipe_ingredients['ing'] as $id => $ingredient) {
+
+//     $form['recipe_ingredients']['ing'][$id]['ri_id'] = array(
+//       '#type' => 'hidden',
+//       '#value' => $ingredient['ri_id'],
+//     );
+
+//     // Strange, but html_entity_decode() doesn't handle &frasl;
+//     $form['recipe_ingredients']['ing'][$id]['quantity'] = array(
+//       '#type' => 'textfield',
+//       '#title' => t('Quantity'),
+//       '#default_value' => preg_replace('/\&frasl;/', '/', recipe_ingredient_quantity_from_decimal($ingredient['quantity'], TRUE)),
+//       '#size' => 8,
+//       '#maxlength' => 8,
+//       '#attributes' => array('class' => array('form-item-recipe-ingredients-quantity')),
+//     );
+//     $form['recipe_ingredients']['ing'][$id]['unit_key'] = array(
+//       '#type' => 'select',
+//       '#title' => t('Unit'),
+//       '#default_value' => $ingredient['unit_key'] != '' ? $ingredient['unit_key'] : variable_get('recipe_default_unit', ''),
+//       '#options' => recipe_unit_options(),
+//       '#attributes' => array('class' =>array('form-item-recipe-ingredients-unit-key')),
+//     );
+//     $form['recipe_ingredients']['ing'][$id]['name'] = array(
+//       '#type' => 'textfield',
+//       '#title' => t('Name'),
+//       '#default_value' => $ingredient['name'],
+//       '#size' => 25,
+//       '#maxlength' => 128,
+//       '#autocomplete_path' => $callback,
+//       '#attributes' => array('class' =>array('form-item-recipe-ingredients-name')),
+//     );
+//     $form['recipe_ingredients']['ing'][$id]['note'] = array(
+//       '#type' => 'textfield',
+//       '#title' => t('Note'),
+//       '#default_value' => $ingredient['note'],
+//       '#size' => 40,
+//       '#maxlength' => 255,
+//       '#attributes' => array('class' =>array('form-item-recipe-ingredients-note')),
+//     );
+//     $form['recipe_ingredients']['ing'][$id]['weight'] = array(
+//       '#type' => 'weight',
+//       '#title' => t('Weight'),
+//       '#default_value' => $ingredient['weight'],
+//       '#delta' => $weight_delta,
+//     );
+//   }
+//   // We name our button 'recipe_more_ingredients' to avoid conflicts with other modules using
+//   // Ajax-enabled buttons with the id 'more'.
+//   $form['recipe_ingredients']['recipe_more_ingredients'] = array(
+//     '#type' => 'submit',
+//     '#value' => t('More ingredients'),
+//     '#description' => t("If the amount of boxes above isn't enough, click here to add more ingredients."),
+//     '#weight' => 1,
+//     '#submit' => array('recipe_more_ingredients_submit'),
+//     '#limit_validation_errors' => array(),
+//     '#ajax' => array(
+//       'callback' => 'recipe_more_ingredients_js',
+//       'wrapper' => 'ingredients-wrapper',
+//       'effect' => 'fade',
+//     ),
+//   );
+
+  $language = $form['language']['#value'];
+
+  foreach (element_children($form['recipe_ingredients'][$language]) as $delta) {
+    $fcoll = &$form['recipe_ingredients'][$language][$delta];
+    $fcoll['ri_quantity'][$language][0]['value']['#size'] = 7;
   }
 
-  // Figure out max weight so new ingredients will sort at the
-  // bottom by default.
-  $max_weight = 0;
-  foreach ($node->recipe_ingredients['ing'] as $id => $ingredient) {
-    if ($max_weight < $ingredient['weight']) {
-      $max_weight = $ingredient['weight'];
-    }
-  }
-
-  if (isset($form_state['add_ingredients']) || count($node->recipe_ingredients['ing']) == 0) {
-    unset($form_state['add_ingredients']);
-    $add_count = variable_get('recipe_add_more_count', 5);
-    for ($delta = 0; $delta < $add_count; $delta++) {
-      array_push($node->recipe_ingredients['ing'], array('ri_id' => NULL, 'quantity' => '', 'unit_key' => '', 'name' => '', 'note' => '', 'weight' => $max_weight + $delta));
-    }
-  }
-
-  // Weights range from -delta to +delta, so delta should be at least
-  // half of the amount of blocks present. This makes sure all blocks
-  // in the same region get an unique weight.
-  $weight_delta = count($node->recipe_ingredients['ing']);
-
-  // Container for just the ingredients.
-  $form['recipe_ingredients']['ing'] = array(
-    '#prefix' => '<div id="ingredients-wrapper">',
-    '#suffix' => '</div>',
-    '#theme' => 'ingredients_form',
-  );
-
-  foreach ($node->recipe_ingredients['ing'] as $id => $ingredient) {
-
-    $form['recipe_ingredients']['ing'][$id]['ri_id'] = array(
-      '#type' => 'hidden',
-      '#value' => $ingredient['ri_id'],
-    );
-
-    // Strange, but html_entity_decode() doesn't handle &frasl;
-    $form['recipe_ingredients']['ing'][$id]['quantity'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Quantity'),
-      '#default_value' => preg_replace('/\&frasl;/', '/', recipe_ingredient_quantity_from_decimal($ingredient['quantity'], TRUE)),
-      '#size' => 8,
-      '#maxlength' => 8,
-      '#attributes' => array('class' => array('form-item-recipe-ingredients-quantity')),
-    );
-    $form['recipe_ingredients']['ing'][$id]['unit_key'] = array(
-      '#type' => 'select',
-      '#title' => t('Unit'),
-      '#default_value' => $ingredient['unit_key'] != '' ? $ingredient['unit_key'] : variable_get('recipe_default_unit', ''),
-      '#options' => recipe_unit_options(),
-      '#attributes' => array('class' =>array('form-item-recipe-ingredients-unit-key')),
-    );
-    $form['recipe_ingredients']['ing'][$id]['name'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Name'),
-      '#default_value' => $ingredient['name'],
-      '#size' => 25,
-      '#maxlength' => 128,
-      '#autocomplete_path' => $callback,
-      '#attributes' => array('class' =>array('form-item-recipe-ingredients-name')),
-    );
-    $form['recipe_ingredients']['ing'][$id]['note'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Note'),
-      '#default_value' => $ingredient['note'],
-      '#size' => 40,
-      '#maxlength' => 255,
-      '#attributes' => array('class' =>array('form-item-recipe-ingredients-note')),
-    );
-    $form['recipe_ingredients']['ing'][$id]['weight'] = array(
-      '#type' => 'weight',
-      '#title' => t('Weight'),
-      '#default_value' => $ingredient['weight'],
-      '#delta' => $weight_delta,
-    );
-  }
-  // We name our button 'recipe_more_ingredients' to avoid conflicts with other modules using
-  // Ajax-enabled buttons with the id 'more'.
-  $form['recipe_ingredients']['recipe_more_ingredients'] = array(
-    '#type' => 'submit',
-    '#value' => t('More ingredients'),
-    '#description' => t("If the amount of boxes above isn't enough, click here to add more ingredients."),
-    '#weight' => 1,
-    '#submit' => array('recipe_more_ingredients_submit'),
-    '#limit_validation_errors' => array(),
-    '#ajax' => array(
-      'callback' => 'recipe_more_ingredients_js',
-      'wrapper' => 'ingredients-wrapper',
-      'effect' => 'fade',
-    ),
+  $css = '.field-name-recipe-ingredients .form-wrapper { display: inline-block; }';
+  $form['recipe_ingredients']['#attached']['css'] = array(
+    $css => array('type' => 'inline'),
   );
 }
 
@@ -1667,26 +1679,7 @@ function recipe_views_api() {
  */
 function recipe_field_extra_fields() {
   if (variable_get('recipe_fields_installed', FALSE)) {
-    return array(
-        'node' => array(
-          'recipe' => array(
-            'form' => array(
-              'recipe_ingredients' => array(
-                'label' => t('Ingredients'),
-                'description' => t('Recipe module element'),
-                'weight' => -3,
-              ),
-            ),
-            'display' => array(
-              'recipe_ingredients' => array(
-                'label' => t('Ingredients'),
-                'description' => t('Recipe module element'),
-                'weight' => -3,
-              ),
-            ),
-          ),
-        ),
-    );
+    return array();
   }
 
   $extra = array();

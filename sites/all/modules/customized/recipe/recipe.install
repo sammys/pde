@@ -654,3 +654,51 @@ function recipe_update_7203(&$sandbox) {
     = empty($sandbox['max'])
       ? TRUE : ($sandbox['progress'] / $sandbox['max']);
 }
+
+/**
+ * Migrate recipe ingredients into field collections.
+ */
+function recipe_update_7204(&$sandbox) {
+  if (!isset($sandbox['progress'])) {
+    $sandbox['progress'] = 0;
+    $sandbox['current_nid'] = 0;
+    $sandbox['max']
+    = db_query(
+      "SELECT COUNT(DISTINCT nid) FROM {node} WHERE type = :type",
+      array(':type' => 'recipe')
+    )->fetchField();
+
+  }
+
+  $query = db_select('node', 'n');
+  $query->join('recipe_node_ingredient', 'r', 'n.nid = r.nid');
+  $query->join('recipe_ingredient', 'r', 'n.nid = r.nid');
+  $query->fields('r')
+  ->condition('n.type', 'recipe')
+  ->range($sandbox['progress'], 10);
+  $result = $query->execute();
+
+  foreach ($result as $record) {
+    $sandbox['current_nid'] = $record->nid;
+    $nwrapper = entity_metadata_wrapper('node', $record->nid);
+
+    if (valid_url($record->source, TRUE)) {
+      // Put the URL into the link field
+      $nwrapper->field_source_link->url = $record->source;
+    }
+    $nwrapper->field_source = $record->source;
+    $nwrapper->field_yield = $record->yield;
+    $nwrapper->field_yield_unit = $record->yield_unit;
+    $nwrapper->field_description->value = $record->description;
+    $nwrapper->instructions->value = $record->instructions;
+    $nwrapper->field_notes->value = $record->notes;
+    $nwrapper->field_preptime = $record->preptime;
+    $nwrapper->field_cooktime = $record->cooktime;
+
+    $sandbox['progress']++;
+  }
+
+  $sandbox['#finished']
+  = empty($sandbox['max'])
+  ? TRUE : ($sandbox['progress'] / $sandbox['max']);
+}

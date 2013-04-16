@@ -411,7 +411,53 @@ function pde_output($msg) {
 }
 
 function pde_entity_value($entity_wrapper) {
-  return pde_output($entity_wrapper->label());
+  $info = $entity_wrapper->getPropertyInfo();
+//   if ($entity_wrapper->type == 'field_collection_item') return;
+//   drush_print_r($info);
+//   drush_print_r($entity_wrapper->value());
+
+  $output = pde_output('identifier: '
+    . $entity_wrapper->getIdentifier());
+  $output .= pde_output('label: ' . $entity_wrapper->label());
+  $output .= pde_output('type: ' . $entity_wrapper->type());
+
+  foreach ($entity_wrapper as $pkey => $pwrapper) {
+    if (isset($info[$pkey]['field']) && $info[$pkey]['field']) {
+      $msg = $info[$pkey]['label'];
+    }
+    else {
+      $msg = $pkey;
+    }
+    $msg .= ': ';
+
+    if ($entity_wrapper->$pkey instanceof EntityDrupalWrapper) {
+      $msg .= pde_output($entity_wrapper->$pkey->label());
+    }
+    else if ($entity_wrapper->$pkey instanceof EntityListWrapper) {
+      $items = array();
+      foreach ($entity_wrapper->$pkey as $key => $value) {
+        $item_value = "[$key] ";
+        if ($value instanceof EntityDrupalWrapper) {
+          $item_value .= $value->label();
+        }
+        else {
+          $item_value .= pde_field_value($value);
+        }
+        $items[] = $item_value;
+      }
+
+      $msg .= "\n\t";
+      if (!count($items)) {
+        $msg .= "<empty>";
+      }
+      $msg .= implode("\n\t", $items) . "\n";
+    }
+    else {
+      $msg .= pde_field_value($entity_wrapper->$pkey);
+    }
+    $output .= $msg;
+  }
+  return $output;
 }
 
 function pde_structure_value($struct_wrapper) {
