@@ -157,12 +157,21 @@ function drush_pde_print_entity($entity, $type = NULL) {
   foreach ($wrapper as $pkey => $property) {
     // $wrapper->$pkey === $property
     if (isset($info[$pkey]['field']) && $info[$pkey]['field']) {
-      $key = "$pkey (" . $wrapper->$pkey->type() . ')';
-      $rows[$key] = pde_field_value($wrapper->$pkey);
+      $value = pde_field_value($wrapper->$pkey);
+      if (is_array($value)) {
+        foreach ($value as $i => $v) {
+          $key = $pkey."[$i] (" . $wrapper->$pkey->type() . ')';
+          $rows[$key] = rtrim($v);
+        }
+      }
+      else {
+        $key = "$pkey (" . $wrapper->$pkey->type() . ')';
+        $rows[$key] = rtrim($value);
+      }
     }
     else if (!($property instanceof EntityValueWrapper)) {
       $rows[$pkey] = $property->raw()
-        . ' (' . $property->label() . ')'."\nFoo";
+        . ' (' . $property->label() . ')';
     }
     else {
       $rows[$pkey] = $property->value();
@@ -374,9 +383,9 @@ function pde_field_value($field_wrapper) {
   try {
     if ($field_wrapper instanceof EntityListWrapper) {
       // Handle EntityListWrapper multi-value fields
-      $output = '';
+      $output = array();
       foreach ($field_wrapper as $value) {
-        $output .= pde_field_value($value);
+        $output[] = pde_field_value($value);
       }
     }
     else if ($field_wrapper instanceof EntityDrupalWrapper) {
