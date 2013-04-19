@@ -152,10 +152,24 @@ function drush_pde_print_entity($entity, $type = NULL) {
   // equivalents: $wrapper->value()->entityType()
   //              $wrapper->value()->identifier()
 
+  $info = $wrapper->getPropertyInfo();
   $rows = array();
   foreach ($wrapper as $pkey => $property) {
     // $wrapper->$pkey === $property
-    if (!($property instanceof EntityValueWrapper)) {
+    if (isset($info[$pkey]['field']) && $info[$pkey]['field']) {
+      $value = pde_field_value($wrapper->$pkey);
+      if (is_array($value)) {
+        foreach ($value as $i => $v) {
+          $key = $pkey."[$i] (" . $wrapper->$pkey->type() . ')';
+          $rows[$key] = rtrim($v);
+        }
+      }
+      else {
+        $key = "$pkey (" . $wrapper->$pkey->type() . ')';
+        $rows[$key] = rtrim($value);
+      }
+    }
+    else if (!($property instanceof EntityValueWrapper)) {
       $rows[$pkey] = $property->raw()
         . ' (' . $property->label() . ')';
     }
@@ -363,6 +377,140 @@ function _pde_print_entity_base_table($entity) {
   }
 
   drush_pde_print_table($info['base table']);
+}
+
+function pde_field_value($field_wrapper) {
+  try {
+    if ($field_wrapper instanceof EntityListWrapper) {
+      // Handle EntityListWrapper multi-value fields
+      $output = array();
+      foreach ($field_wrapper as $value) {
+        $output[] = pde_field_value($value);
+      }
+    }
+    else if ($field_wrapper instanceof EntityDrupalWrapper) {
+      $output = pde_entity_value($field_wrapper);
+    }
+    else if ($field_wrapper instanceof EntityStructureWrapper) {
+      $output = pde_structure_value($field_wrapper);
+    }
+    else {
+      $output = pde_output(
+        $field_wrapper->value(array('decode' => TRUE)));
+    }
+  }
+  catch (EntityMetadataWrapperException $e) {
+    return '';
+  }
+
+  return $output;
+}
+
+function pde_output($msg) {
+  return $msg . "\n";
+}
+
+function pde_entity_value($entity_wrapper) {
+  $info = $entity_wrapper->getPropertyInfo();
+//   if ($entity_wrapper->type == 'field_collection_item') return;
+//   drush_print_r($info);
+//   drush_print_r($entity_wrapper->value());
+
+  $output = pde_output('identifier: '
+    . $entity_wrapper->getIdentifier());
+  $output .= pde_output('label: ' . $entity_wrapper->label());
+  $output .= pde_output('type: ' . $entity_wrapper->type());
+
+  foreach ($entity_wrapper as $pkey => $pwrapper) {
+    if (isset($info[$pkey]['field']) && $info[$pkey]['field']) {
+      $msg = $info[$pkey]['label'];
+    }
+    else {
+      $msg = $pkey;
+    }
+    $msg .= ': ';
+
+    if ($entity_wrapper->$pkey instanceof EntityDrupalWrapper) {
+      $msg .= pde_output($entity_wrapper->$pkey->label());
+    }
+    else if ($entity_wrapper->$pkey instanceof EntityListWrapper) {
+      $items = array();
+      foreach ($entity_wrapper->$pkey as $key => $value) {
+        $item_value = "[$key] ";
+        if ($value instanceof EntityDrupalWrapper) {
+          $item_value .= $value->label();
+        }
+        else {
+          $item_value .= pde_field_value($value);
+        }
+        $items[] = $item_value;
+      }
+
+      $msg .= "\n\t";
+      if (!count($items)) {
+        $msg .= "<empty>";
+      }
+      $msg .= implode("\n\t", $items) . "\n";
+    }
+    else {
+      $msg .= pde_field_value($entity_wrapper->$pkey);
+    }
+    $output .= $msg;
+  }
+  return $output;
+}
+
+function pde_structure_value($struct_wrapper) {
+  $field_type = $struct_wrapper->type();
+
+  switch ($field_type) {
+    case 'field_item_link':
+      $url = $struct_wrapper->url->value(array('decode' => TRUE));
+      $title
+        = $struct_wrapper->title->value(array('decode' => TRUE));
+      if (empty($title)) {
+        $title = $url;
+      }
+      return pde_output(l($title, $url));
+    case 'field_item_image':
+    case 'field_item_file':
+      // Special case!
+      // File entity: $field_wrapper->file
+      return pde_field_value($struct_wrapper->file);
+    case 'struct':
+      return pde_struct_value($struct_wrapper);
+    case 'text_formatted':
+      return pde_output(
+        $struct_wrapper->value->value(array('decode' => TRUE)));
+    default:
+      throw new Exception(
+        'No idea how to handle structure type '.$field_type);
+  }
+}
+
+function pde_struct_value($struct_wrapper) {
+  $struct_type = $struct_wrapper->value->type();
+  switch ($struct_type) {
+    case 'date':
+      return pde_date_value($struct_wrapper);
+    default:
+      throw new Exception(
+        'No idea how to handle struct type '.$struct_type);
+  }
+}
+
+function pde_date_value($date_wrapper) {
+  $output = $date_wrapper->value->value(array('decode' => TRUE));
+  if ($date_wrapper->duration->value(array('decode' => TRUE))) {
+    $output .= ' - '
+      . $date_wrapper->value2->value(array('decode' => TRUE));
+  }
+
+  // $date_wrapper->value() returns the array of data available
+  $date_value = $date_wrapper->value();
+  $output .= ' ' . $date_value['timezone'];
+
+  return pde_output($output);
 }
 
 /**

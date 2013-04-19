@@ -1,0 +1,16 @@
+name = Recipe
+description = Collect and display recipes.
+package = Recipe
+dependencies[] = entity
+dependencies[] = entityreference
+dependencies[] = field_collection
+dependencies[] = link
+dependencies[] = list
+dependencies[] = number
+dependencies[] = options
+dependencies[] = taxonomy
+dependencies[] = text
+dependencies[] = token
+core = 7.x
+
+configure = admin/config/system/recipe
