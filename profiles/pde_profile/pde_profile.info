@@ -2,6 +2,7 @@ name = "Programming Drupal Entities"
 description = "Base installation for Programming Drupal Entities: Chapter 6."
 version = 7.x-1.6
 core = 7.x
+exclusive = TRUE
 dependencies[] = admin_menu
 dependencies[] = block
 dependencies[] = devel
