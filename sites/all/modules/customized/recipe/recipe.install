@@ -130,6 +130,13 @@ function recipe_schema() {
         'unsigned' => TRUE,
         'not null' => TRUE,
       ),
+      'type' => array(
+        'description' => 'The type of this ingredient.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => 'standard',
+      ),
       'name' => array(
         'type' => 'varchar',
         'length' => 255,
@@ -141,6 +148,63 @@ function recipe_schema() {
       ),
     ),
     'primary key' => array('id'),
+  );
+
+  $schema['recipe_ingredient_type'] = array(
+    'description' => 'Stores information about all defined ingredient types.',
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique ingredient type ID.',
+      ),
+      'type' => array(
+        'description' => 'The machine-readable name of this ingredient type.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+      ),
+      'label' => array(
+        'description' => 'The human-readable name of this ingredient type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'The weight of this ingredient type in relation to others.',
+      ),
+      'data' => array(
+        'type' => 'text',
+        'not null' => FALSE,
+        'size' => 'big',
+        'serialize' => TRUE,
+        'description' => 'A serialized array of additional data related to this ingredient type.',
+      ),
+      'status' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        // Set the default to ENTITY_CUSTOM without using the constant as it is
+        // not safe to use it at this point.
+        'default' => 0x01,
+        'size' => 'tiny',
+        'description' => 'The exportable status of the entity.',
+      ),
+      'module' => array(
+        'description' => 'The name of the providing module if the entity has been defined in code.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('id'),
+    'unique keys' => array(
+      'type' => array('type'),
+    ),
   );
 
   return $schema;
@@ -404,6 +468,18 @@ function recipe_install() {
   recipe_install_vocabularies();
   recipe_install_terms();
   recipe_install_fields();
+
+//   // Add standard ingredient type
+//   $type = entity_create('recipe_ingredient_type', array(
+//     'type' => 'standard',
+//     'label' => t('Standard'),
+//     'weight' => 0,
+//     'data' => array(),
+//   ));
+//   $type->save();
+//   if (!drupal_installation_attempted()) {
+//     drupal_set_message(t('A standard ingredient type has been created.'));
+//   }
 }
 
 /**
@@ -723,4 +799,82 @@ function recipe_update_7204(&$sandbox) {
   $sandbox['#finished']
   = empty($sandbox['max'])
   ? TRUE : ($sandbox['progress'] / $sandbox['max']);
+}
+
+/**
+ * Make schema changes for ingredients as entities.
+ */
+function recipe_update_7205(&$sandbox) {
+  // Add ingredient type table
+  $table_name = 'recipe_ingredient_type';
+  $schema[$table_name] = array(
+    'description' => 'Stores information about all defined ingredient types.',
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique ingredient type ID.',
+      ),
+      'type' => array(
+        'description' => 'The machine-readable name of this ingredient type.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+      ),
+      'label' => array(
+        'description' => 'The human-readable name of this ingredient type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'The weight of this ingredient type in relation to others.',
+      ),
+      'data' => array(
+        'type' => 'text',
+        'not null' => FALSE,
+        'size' => 'big',
+        'serialize' => TRUE,
+        'description' => 'A serialized array of additional data related to this ingredient type.',
+      ),
+      'status' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        // Set the default to ENTITY_CUSTOM without using the constant as it is
+        // not safe to use it at this point.
+        'default' => 0x01,
+        'size' => 'tiny',
+        'description' => 'The exportable status of the entity.',
+      ),
+      'module' => array(
+        'description' => 'The name of the providing module if the entity has been defined in code.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('id'),
+    'unique keys' => array(
+      'type' => array('type'),
+    ),
+  );
+  db_create_table($table_name, $schema[$table_name]);
+
+  // Add type field
+  $type_schema = array(
+    'description' => 'The type of this ingredient.',
+    'type' => 'varchar',
+    'length' => 32,
+    'not null' => TRUE,
+    'default' => 'standard',
+  );
+  db_add_field('recipe_ingredient', 'type', $type_schema);
+  db_update('recipe_ingredient')->fields(array(
+    'type' => 'standard',
+  ))->execute();
 }

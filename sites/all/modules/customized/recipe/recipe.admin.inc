@@ -9,6 +9,94 @@
  * See http://drupal.org/node/146172
  */
 
+/**
+ * UI controller.
+ */
+class IngredientTypeUIController extends EntityDefaultUIController {
+
+  /**
+   * Overrides hook_menu() defaults.
+   */
+  public function hook_menu() {
+    $items = parent::hook_menu();
+    $items[$this->path]['description'] = 'Manage ingredients, including fields.';
+    return $items;
+  }
+}
+
+/**
+ * Generates the profile type editing form.
+ */
+function recipe_ingredient_type_form($form, &$form_state, $recipe_ingredient_type, $op = 'edit') {
+
+  if ($op == 'clone') {
+    $recipe_ingredient_type->label .= ' (cloned)';
+    $recipe_ingredient_type->type = '';
+  }
+
+  $form['label'] = array(
+    '#title' => t('Label'),
+    '#type' => 'textfield',
+    '#default_value' => $recipe_ingredient_type->label,
+    '#description' => t('The human-readable name of this ingredient type.'),
+    '#required' => TRUE,
+    '#size' => 30,
+  );
+  // Machine-readable type name.
+  $form['type'] = array(
+    '#type' => 'machine_name',
+    '#default_value' => isset($recipe_ingredient_type->type) ? $recipe_ingredient_type->type : '',
+    '#maxlength' => 32,
+    '#disabled' => $recipe_ingredient_type->isLocked() && $op != 'clone',
+    '#machine_name' => array(
+      'exists' => 'recipe_ingredient_get_types',
+      'source' => array('label'),
+    ),
+    '#description' => t('A unique machine-readable name for this profile type. It must only contain lowercase letters, numbers, and underscores.'),
+  );
+
+  $form['actions'] = array('#type' => 'actions');
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save profile type'),
+    '#weight' => 40,
+  );
+  $form['weight'] = array(
+    '#type' => 'weight',
+    '#title' => t('Weight'),
+    '#default_value' => $recipe_ingredient_type->weight,
+    '#description' => t('When showing profiles, those with lighter (smaller) weights get listed before profiles with heavier (larger) weights.'),
+    '#weight' => 10,
+  );
+
+  if (!$recipe_ingredient_type->isLocked() && $op != 'add' && $op != 'clone') {
+    $form['actions']['delete'] = array(
+      '#type' => 'submit',
+      '#value' => t('Delete profile type'),
+      '#weight' => 45,
+      '#limit_validation_errors' => array(),
+      '#submit' => array('recipe_ingredient_type_form_submit_delete')
+    );
+  }
+  return $form;
+}
+
+/**
+ * Form API submit callback for the type form.
+ */
+function recipe_ingredient_type_form_submit(&$form, &$form_state) {
+  $recipe_ingredient_type = entity_ui_form_submit_build_entity($form, $form_state);
+  // Save and go back.
+  $recipe_ingredient_type->save();
+  $form_state['redirect'] = 'admin/structure/profiles';
+}
+
+/**
+ * Form API submit callback for the delete button.
+ */
+function recipe_ingredient_type_form_submit_delete(&$form, &$form_state) {
+  $form_state['redirect'] = 'admin/structure/profiles/manage/' . $form_state['recipe_ingredient_type']->type . '/delete';
+}
 
 /**
  * Settings form for menu callback

@@ -11,6 +11,320 @@ define('RECIPE_BLOCK_RECENT', 0);
 define('RECIPE_BLOCK_SUMMARY', 1);
 
 /**
+ * The class used for ingredient entities.
+ */
+class Ingredient extends Entity {
+
+  /**
+   * The profile id.
+   *
+   * @var integer
+   */
+  public $pid;
+
+  /**
+   * The name of the profile type.
+   *
+   * @var string
+   */
+  public $type;
+
+  /**
+   * The profile label.
+   *
+   * @var string
+   */
+  public $label;
+
+  /**
+   * The user id of the profile owner.
+   *
+   * @var integer
+   */
+  public $uid;
+
+  /**
+   * The Unix timestamp when the profile was created.
+   *
+   * @var integer
+   */
+  public $created;
+
+  /**
+   * The Unix timestamp when the profile was most recently saved.
+   *
+   * @var integer
+   */
+  public $changed;
+
+
+  public function __construct($values = array()) {
+    if (isset($values['user'])) {
+      $this->setUser($values['user']);
+      unset($values['user']);
+    }
+    if (isset($values['type']) && is_object($values['type'])) {
+      $values['type'] = $values['type']->type;
+    }
+    if (!isset($values['label']) && isset($values['type']) && $type = profile2_get_types($values['type'])) {
+      // Initialize the label with the type label, so newly created profiles
+      // have that as interim label.
+      $values['label'] = $type->label;
+    }
+    parent::__construct($values, 'profile2');
+  }
+
+  /**
+   * Returns the user owning this profile.
+   */
+  public function user() {
+    return user_load($this->uid);
+  }
+
+  /**
+   * Sets a new user owning this profile.
+   *
+   * @param $account
+   *   The user account object or the user account id (uid).
+   */
+  public function setUser($account) {
+    $this->uid = is_object($account) ? $account->uid : $account;
+  }
+
+  /**
+   * Gets the associated profile type object.
+   *
+   * @return ProfileType
+   */
+  public function type() {
+    return profile2_get_types($this->type);
+  }
+
+  /**
+   * Returns the full url() for the profile.
+   */
+  public function url() {
+    $uri = $this->uri();
+    return url($uri['path'], $uri);
+  }
+
+  /**
+   * Returns the drupal path to this profile.
+   */
+  public function path() {
+    $uri = $this->uri();
+    return $uri['path'];
+  }
+
+  public function defaultUri() {
+    return array(
+      'path' => 'user/' . $this->uid,
+      'options' => array('fragment' => 'profile-' . $this->type),
+    );
+  }
+
+  public function defaultLabel() {
+    if (module_exists('profile2_i18n')) {
+      // Run the label through i18n_string() using the profile2_type label
+      // context, so the default label (= the type's label) gets translated.
+      return entity_i18n_string('profile2:profile2_type:' . $this->type . ':label', $this->label);
+    }
+    return $this->label;
+  }
+
+  public function buildContent($view_mode = 'full', $langcode = NULL) {
+    $content = array();
+    // Assume newly create objects are still empty.
+    if (!empty($this->is_new)) {
+      $content['empty']['#markup'] = '<em class="profile2-no-data">' . t('There is no profile data yet.') . '</em>';
+    }
+    return entity_get_controller($this->entityType)->buildContent($this, $view_mode, $langcode, $content);
+  }
+
+  public function save() {
+    // Care about setting created and changed values. But do not automatically
+    // set a created values for already existing profiles.
+    if (empty($this->created) && (!empty($this->is_new) || !$this->pid)) {
+      $this->created = REQUEST_TIME;
+    }
+    $this->changed = REQUEST_TIME;
+
+    parent::save();
+    // Update the static cache from profile2_load_by_user().
+    $cache = &drupal_static('profile2_load_by_user', array());
+    if (isset($cache[$this->uid])) {
+      $cache[$this->uid][$this->type] = $this->pid;
+    }
+  }
+}
+
+/**
+ * Use a separate class for ingredient types so we can specify some defaults
+ * modules may alter.
+ */
+class IngredientType extends Entity {
+  public $type;
+  public $label;
+  public $weight = 0;
+
+  public function __construct($values = array()) {
+    parent::__construct($values, 'recipe_ingredient_type');
+  }
+
+  /**
+   * Returns whether the profile type is locked, thus may not be deleted or renamed.
+   *
+   * Profile types provided in code are automatically treated as locked, as well
+   * as any fixed profile type.
+   */
+  public function isLocked() {
+    return isset($this->status) && empty($this->is_new) && (($this->status & ENTITY_IN_CODE) || ($this->status & ENTITY_FIXED));
+  }
+
+  /**
+   * Overridden, to introduce the method for old entity API versions (BC).
+   *
+   * @todo Remove once we bump the required entity API version.
+   */
+  public function getTranslation($property, $langcode = NULL) {
+    if (module_exists('recipe_i18n')) {
+      return parent::getTranslation($property, $langcode);
+    }
+    return $this->$property;
+  }
+
+  /**
+   * Overrides Entity::save().
+   */
+  public function save() {
+    parent::save();
+    // Clear field info caches such that any changes to extra fields get
+    // reflected.
+    field_info_cache_clear();
+  }
+}
+
+/**
+ * Implements hook_entity_info().
+ */
+function recipe_entity_info() {
+  $return = array();
+  $return['recipe_ingredient'] = array(
+    'label' => t('Ingredient'),
+    'plural label' => t('Ingredients'),
+    'description' => t('Recipe ingredients.'),
+    'entity class' => 'Entity',
+    'controller class' => 'EntityAPIController',
+    'base table' => 'recipe_ingredient',
+    'fieldable' => TRUE,
+    'view modes' => array(
+      'full' => array(
+        'label' => t('Full content'),
+        'custom settings' => FALSE,
+      ),
+    ),
+    'entity keys' => array(
+      'id' => 'id',
+      'bundle' => 'type',
+      'label' => 'name',
+    ),
+    'bundles' => array(),
+    'bundle keys' => array(
+      'bundle' => 'type',
+    ),
+    'label callback' => 'entity_class_label',
+    'uri callback' => 'entity_class_uri',
+    'module' => 'recipe',
+  );
+
+  // Add bundle info but bypass entity_load() as we cannot use it here.
+  $types = db_select('recipe_ingredient_type', 'ri')
+    ->fields('ri')
+    ->execute()
+    ->fetchAllAssoc('type');
+  foreach ($types as $type => $info) {
+
+    $return['recipe_ingredient']['bundles'][$type] = array(
+      'label' => $info->label,
+      'admin' => array(
+        'path' => 'admin/structure/ingredients/manage/%recipe_ingredient_type',
+        'real path' => 'admin/structure/ingredients/manage/' . $type,
+        'bundle argument' => 4,
+        'access arguments' => array('administer ingredients'),
+      ),
+    );
+  }
+
+  $return['recipe_ingredient_type'] = array(
+    'label' => t('Ingredient type'),
+    'plural label' => t('Ingredient types'),
+    'description' => t('Ingredient types for Recipe module.'),
+    'entity class' => 'IngredientType',
+    'controller class' => 'EntityAPIControllerExportable',
+    'base table' => 'recipe_ingredient_type',
+    'fieldable' => FALSE,
+    'bundle of' => 'recipe_ingredient',
+    'exportable' => TRUE,
+    'entity keys' => array(
+      'id' => 'id',
+      'name' => 'type',
+      'label' => 'label',
+    ),
+    'access callback' => 'recipe_ingredient_type_access',
+    'module' => 'recipe',
+    // Enable the entity API's admin UI.
+    'admin ui' => array(
+      'path' => 'admin/structure/ingredients',
+      'file' => 'recipe.admin.inc',
+      'controller class' => 'IngredientTypeUIController',
+    ),
+  );
+
+  return $return;
+}
+
+/**
+ * Access callback for the entity API.
+ */
+function recipe_ingredient_type_access($op, $type = NULL, $account = NULL) {
+  return user_access('administer ingredients', $account);
+}
+
+
+/**
+ * Gets an array of all profile types, keyed by the type name.
+ *
+ * @param $type_name
+ *   If set, the type with the given name is returned.
+ * @return ProfileType[]
+ *   Depending whether $type isset, an array of profile types or a single one.
+ */
+function recipe_ingredient_get_types($type_name = NULL) {
+  $types = entity_load_multiple_by_name('recipe_ingredient_type', isset($type_name) ? array($type_name) : FALSE);
+  return isset($type_name) ? reset($types) : $types;
+}
+
+function recipe_ingredient_type_load($type_name) {
+  return recipe_ingredient_get_types($type_name);
+}
+
+/**
+ * Define default ingredient type configurations.
+ *
+ * @return
+ *   An array of default ingredient types, keyed by ingredient type names.
+ */
+function recipe_default_recipe_ingredient_type() {
+  $types['standard'] = new IngredientType(array(
+    'type' => 'standard',
+    'label' => t('Standard'),
+    'weight' => 0,
+    'locked' => TRUE,
+  ));
+  return $types;
+}
+
+/**
  * Implementation of hook_help().
  */
 function recipe_help($path, $arg) {
@@ -75,6 +389,10 @@ function recipe_theme($existing, $type, $theme, $path) {
  */
 function recipe_permission() {
   return array(
+    'administer ingredients' => array(
+      'title' => t('Administer ingredients'),
+      'description' => t('Administer ingredients system-wide.'),
+    ),
     'export recipes' => array(
       'title' => t('Export recipes'),
       'description' => t('Export recipes in various formats.'),
@@ -317,6 +635,17 @@ function recipe_more_ingredients_js($form, $form_state) {
  * Note: when editing this function you must visit 'admin/menu' to reset the cache
  */
 function recipe_menu() {
+//   $items = array();
+//   if (module_exists('field_ui')) {
+//     $items['admin/structure/ingredients'] = array(
+//       'title' => 'Ingredients',
+//       'description' => 'Manage fields on ingredients.',
+//       'page callback' => 'recipe_ingredients_overview',
+//       'access arguments' => array('administer ingredients'),
+//       'type' => MENU_NORMAL_ITEM,
+//       'file' => 'recipe.admin.inc',
+//     );
+//   }
 
   // Add a tab on the recipe add screen for Recipe Import.
   // Need to add 'file path' because some modules render node/add/recipe/std

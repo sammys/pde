@@ -1,6 +1,7 @@
 name = Recipe
 description = Collect and display recipes.
 package = Recipe
+files[] = recipe.admin.inc
 dependencies[] = entity
 dependencies[] = entityreference
 dependencies[] = field_collection
