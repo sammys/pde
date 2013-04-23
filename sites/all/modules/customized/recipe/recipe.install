@@ -188,8 +188,8 @@ function recipe_schema() {
       'status' => array(
         'type' => 'int',
         'not null' => TRUE,
-        // Set the default to ENTITY_CUSTOM without using the constant as it is
-        // not safe to use it at this point.
+        // Set the default to ENTITY_CUSTOM without using the
+        // constant as it is not safe to use it at this point.
         'default' => 0x01,
         'size' => 'tiny',
         'description' => 'The exportable status of the entity.',
@@ -468,18 +468,6 @@ function recipe_install() {
   recipe_install_vocabularies();
   recipe_install_terms();
   recipe_install_fields();
-
-//   // Add standard ingredient type
-//   $type = entity_create('recipe_ingredient_type', array(
-//     'type' => 'standard',
-//     'label' => t('Standard'),
-//     'weight' => 0,
-//     'data' => array(),
-//   ));
-//   $type->save();
-//   if (!drupal_installation_attempted()) {
-//     drupal_set_message(t('A standard ingredient type has been created.'));
-//   }
 }
 
 /**
@@ -805,6 +793,21 @@ function recipe_update_7204(&$sandbox) {
  * Make schema changes for ingredients as entities.
  */
 function recipe_update_7205(&$sandbox) {
+  // Add type field
+  $type_schema = array(
+    'description' => 'The type of this ingredient.',
+    'type' => 'varchar',
+    'length' => 32,
+    'not null' => TRUE,
+    'default' => 'standard',
+  );
+  db_add_field('recipe_ingredient', 'type', $type_schema);
+}
+
+/**
+ * Make schema changes for ingredients as entities.
+ */
+function recipe_update_7206(&$sandbox) {
   // Add ingredient type table
   $table_name = 'recipe_ingredient_type';
   $schema[$table_name] = array(
@@ -845,8 +848,8 @@ function recipe_update_7205(&$sandbox) {
       'status' => array(
         'type' => 'int',
         'not null' => TRUE,
-        // Set the default to ENTITY_CUSTOM without using the constant as it is
-        // not safe to use it at this point.
+        // Set the default to ENTITY_CUSTOM without using the
+        // constant as it is not safe to use it at this point.
         'default' => 0x01,
         'size' => 'tiny',
         'description' => 'The exportable status of the entity.',
@@ -864,17 +867,4 @@ function recipe_update_7205(&$sandbox) {
     ),
   );
   db_create_table($table_name, $schema[$table_name]);
-
-  // Add type field
-  $type_schema = array(
-    'description' => 'The type of this ingredient.',
-    'type' => 'varchar',
-    'length' => 32,
-    'not null' => TRUE,
-    'default' => 'standard',
-  );
-  db_add_field('recipe_ingredient', 'type', $type_schema);
-  db_update('recipe_ingredient')->fields(array(
-    'type' => 'standard',
-  ))->execute();
 }

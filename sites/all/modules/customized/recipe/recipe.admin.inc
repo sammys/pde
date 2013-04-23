@@ -10,22 +10,7 @@
  */
 
 /**
- * UI controller.
- */
-class IngredientTypeUIController extends EntityDefaultUIController {
-
-  /**
-   * Overrides hook_menu() defaults.
-   */
-  public function hook_menu() {
-    $items = parent::hook_menu();
-    $items[$this->path]['description'] = 'Manage ingredients, including fields.';
-    return $items;
-  }
-}
-
-/**
- * Generates the profile type editing form.
+ * Generates the recipe_ingredient_type editing form.
  */
 function recipe_ingredient_type_form($form, &$form_state, $recipe_ingredient_type, $op = 'edit') {
 
@@ -52,27 +37,27 @@ function recipe_ingredient_type_form($form, &$form_state, $recipe_ingredient_typ
       'exists' => 'recipe_ingredient_get_types',
       'source' => array('label'),
     ),
-    '#description' => t('A unique machine-readable name for this profile type. It must only contain lowercase letters, numbers, and underscores.'),
+    '#description' => t('A unique machine-readable name for this ingredient type. It must only contain lowercase letters, numbers, and underscores.'),
   );
 
   $form['actions'] = array('#type' => 'actions');
   $form['actions']['submit'] = array(
     '#type' => 'submit',
-    '#value' => t('Save profile type'),
+    '#value' => t('Save ingredient type'),
     '#weight' => 40,
   );
   $form['weight'] = array(
     '#type' => 'weight',
     '#title' => t('Weight'),
     '#default_value' => $recipe_ingredient_type->weight,
-    '#description' => t('When showing profiles, those with lighter (smaller) weights get listed before profiles with heavier (larger) weights.'),
+    '#description' => t('When showing ingredients, those with lighter (smaller) weights get listed before ingredients with heavier (larger) weights.'),
     '#weight' => 10,
   );
 
   if (!$recipe_ingredient_type->isLocked() && $op != 'add' && $op != 'clone') {
     $form['actions']['delete'] = array(
       '#type' => 'submit',
-      '#value' => t('Delete profile type'),
+      '#value' => t('Delete ingredient type'),
       '#weight' => 45,
       '#limit_validation_errors' => array(),
       '#submit' => array('recipe_ingredient_type_form_submit_delete')
@@ -82,20 +67,24 @@ function recipe_ingredient_type_form($form, &$form_state, $recipe_ingredient_typ
 }
 
 /**
- * Form API submit callback for the type form.
+ * Form API submit callback for the save button.
  */
 function recipe_ingredient_type_form_submit(&$form, &$form_state) {
-  $recipe_ingredient_type = entity_ui_form_submit_build_entity($form, $form_state);
+  entity_ui_get_form();
+  $recipe_ingredient_type
+  = entity_ui_form_submit_build_entity($form, $form_state);
   // Save and go back.
   $recipe_ingredient_type->save();
-  $form_state['redirect'] = 'admin/structure/profiles';
+  $form_state['redirect'] = 'admin/structure/ingredients';
 }
 
 /**
  * Form API submit callback for the delete button.
  */
 function recipe_ingredient_type_form_submit_delete(&$form, &$form_state) {
-  $form_state['redirect'] = 'admin/structure/profiles/manage/' . $form_state['recipe_ingredient_type']->type . '/delete';
+  $type = $form_state['recipe_ingredient_type']->type;
+  $form_state['redirect']
+  = "admin/structure/ingredients/manage/$type/delete";
 }
 
 /**
