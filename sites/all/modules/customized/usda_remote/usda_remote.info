@@ -1,0 +1,9 @@
+name = USDA Remote Entities
+description = "Exposes remote USDA nutrient database to Drupal as entities."
+core = "7.x"
+version = "0.1"
+dependencies[] = clients_drupal_rest
+dependencies[] = recipe
+dependencies[] = remote_entity
+files[] = usda_remote.clients.inc
+files[] = usda_remote.query.inc
