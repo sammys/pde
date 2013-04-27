@@ -160,6 +160,9 @@ function drush_pde_print_entity($entity, $type = NULL) {
       $key = "$pkey (" . $wrapper->$pkey->type() . ')';
       $rows[$key] = pde_field_value($wrapper->$pkey);
     }
+    else if ($property instanceof EntityStructureWrapper) {
+      $rows[$pkey] = rtrim(pde_structure_value($property));
+    }
     else if (!($property instanceof EntityValueWrapper)) {
       $rows[$pkey] = $property->raw()
         . ' (' . $property->label() . ')'."\nFoo";
@@ -423,8 +426,12 @@ function pde_structure_value($struct_wrapper) {
       return pde_output(
         $struct_wrapper->value->value(array('decode' => TRUE)));
     default:
-      throw new Exception(
-        'No idea how to handle structure type '.$field_type);
+      $output = pde_output('<Structure> ' . $field_type);
+      foreach ($struct_wrapper as $pkey => $property) {
+        $output .= pde_output($pkey . ': '
+          . $property->value(array('decode' => TRUE)));
+      }
+      return $output;
   }
 }
 
