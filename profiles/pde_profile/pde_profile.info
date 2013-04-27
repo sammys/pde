@@ -9,3 +9,4 @@ dependencies[] = devel
 dependencies[] = entity
 dependencies[] = field_ui
 dependencies[] = recipe
+dependencies[] = usda_remote
