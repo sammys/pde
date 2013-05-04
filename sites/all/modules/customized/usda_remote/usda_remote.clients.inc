@@ -88,6 +88,6 @@ ClientsRemoteEntityInterface {
    *  A remote query object of the type appropriate to the query type.
    */
   function getRemoteEntityQuery($query_type = 'select') {
-    // Add your code here
+    ////////////////// Code goes here
   }
 }
