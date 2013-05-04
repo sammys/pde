@@ -1,0 +1,196 @@
+<?php
+
+/**
+ * Implements hook_clients_connection_type_info().
+ */
+function usda_remote_clients_connection_type_info() {
+  return array(
+    'usda_services' => array(
+      'label'  => t('USDA Services'),
+      'description' => t('Connects to USDA data service using REST endpoints.'),
+      'tests' => array(
+        'login' => 'ClientsConnectionDrupalRESTTestLogin',
+        'node_retrieve' => 'ClientsConnectionDrupalRESTTestNodeRetrieve',
+      ),
+    ),
+  );
+}
+
+/**
+ * Define default client connections.
+ */
+function usda_remote_clients_default_connections() {
+  $connections['usda_ndbs'] = new clients_connection_usda_services(array(
+    'endpoint' => 'http://usda.sammyspets.com/usda',
+    'configuration' => array(
+      'username' => '',
+      'password' => '',
+    ),
+    'label' => 'USDA Nutritional Database Service',
+    'type' => 'usda_services',
+  ), 'clients_connection');
+  return $connections;
+}
+
+/**
+ * Define default client resources.
+ */
+function usda_remote_clients_default_resources() {
+  $resources['usda_food_des'] = new clients_resource_remote_entity(array(
+    'component' => 'usda_food_des',
+    'connection' => 'usda_ndbs',
+    'label' => 'USDA Food Descriptions',
+    'type' => 'remote_entity',
+  ), 'clients_resource');
+  return $resources;
+}
+
+/**
+ * Define default ingredient type configurations.
+ *
+ * @return
+ *   An array of default ingredient types, keyed by ingredient type
+ *   names.
+ */
+function usda_remote_default_recipe_ingredient_type() {
+  $types['usda'] = new IngredientType(array(
+    'type' => 'usda',
+    'label' => t('USDA'),
+    'weight' => 0,
+    // 'status' => ENTITY_FIXED,
+  ));
+  return $types;
+}
+
+/**
+ * Implements hook_entity_info().
+ */
+function usda_remote_entity_info() {
+  ////////////////// Code goes here
+}
+
+function _usda_remote_remote_properties() {
+  $properties = array();
+  $properties['usda_food_des'] = array(
+    'ndb_no' => array(
+      'type' => 'text',
+      'description' => '5-digit Nutrient Databank number that uniquely identifies a food item.',
+    ),
+    'fdgrp_cd' => array(
+      'type' => 'text',
+      'description' => '4-digit code indicating food group to which a food item belongs.',
+    ),
+    'long_desc' => array(
+      'type' => 'text',
+      'description' => '200-character description of food item.',
+    ),
+    'shrt_desc' => array(
+      'type' => 'text',
+      'description' => '60-character abbreviated description of food item.',
+    ),
+    'comname' => array(
+      'type' => 'text',
+      'description' => 'Other names commonly used to describe a food, including local or regional names for various foods, for example, “soda” or “pop” for “carbonated beverages.”',
+    ),
+    'manufacname' => array(
+      'type' => 'text',
+      'description' => 'Indicates the company that manufactured the product, when appropriate.',
+    ),
+    'survey' => array(
+      'type' => 'integer',
+      'description' => 'Indicates if the food item is used in the USDA Food and Nutrient Database for Dietary Studies (FNDDS) and thus has a complete nutrient profile for the 65 FNDDS nutrients.',
+    ),
+    'ref_desc' => array(
+      'type' => 'text',
+      'description' => 'Description of inedible parts of a food item (refuse), such as seeds or bone.',
+    ),
+    'refuse' => array(
+      'type' => 'integer',
+      'description' => 'Percentage of refuse.',
+    ),
+    'sciname' => array(
+      'type' => 'text',
+      'description' => 'Scientific name of the food item. Given for the least processed form of the food (usually raw), if applicable.',
+    ),
+    'n_factor' => array(
+      'type' => 'decimal',
+      'description' => 'Factor for converting nitrogen to protein.',
+    ),
+    'pro_factor' => array(
+      'type' => 'decimal',
+      'description' => 'Factor for calculating calories from protein.',
+    ),
+    'fat_factor' => array(
+      'type' => 'decimal',
+      'description' => 'Factor for calculating calories from fat.',
+    ),
+    'cho_factor' => array(
+      'type' => 'decimal',
+      'description' => 'Factor for calculating calories from carbohydrate.',
+    ),
+  );
+  return $properties;
+}
+
+/**
+ * Implements hook_entity_property_info_alter().
+ *
+ * This is needed to use wrappers to access the remote entity
+ * data in the entity_data property of remote entities.
+ *
+ * Might not be needed when remote_entity is released.
+ */
+function usda_remote_entity_property_info_alter(&$info) {
+  ////////////////// Code goes here
+}
+
+/**
+ * Access callback for the entity API.
+ */
+function usda_remote_admin_access($op, $type = NULL, $account = NULL) {
+  return user_access('administer usda data', $account);
+}
+
+/**
+ * Implements hook_remote_entity_query_table_info().
+ *
+ * NOTE: This is here to prevent a PHP warning in
+ * remote_entity_get_query_table_info(). This should be
+ * unneccessary once remote_entity is released.
+ */
+function usda_remote_remote_entity_query_table_info() {
+  return array(
+    'usda_ndbs' => array(),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function usda_remote_menu() {
+  $items = array();
+
+  $items['admin/content/usda/import'] = array(
+    'title' => 'Import data',
+    'description' => 'Form to import USDA data into this Drupal site.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('usda_remote_import_form'),
+    'access arguments' => array('administer usda data'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'usda_remote.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function usda_remote_permission() {
+   return array(
+    'administer usda data' => array(
+      'title' => t('Administer USDA data'),
+      'description' => t('Allow users to administer USDA data.'),
+    ),
+  );
+}
