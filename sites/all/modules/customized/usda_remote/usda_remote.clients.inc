@@ -59,32 +59,6 @@ ClientsRemoteEntityInterface {
     }
   }
 
-  function remote_entity_count($entity_type) {
-      // Based on example code at http://drupal.org/node/910598.
-//       $data = array(
-//         'username' => $this->configuration['username'],
-//         'password' => $this->configuration['password'],
-//       );
-//       $data = http_build_query($data, '', '&');
-    $data = '';
-    $headers = array();
-    $options = array(
-      'headers' => array(
-        'Accept' => 'application/json',
-      ),
-      'method' => 'POST',
-      'data' => $data,
-    );
-
-    $response = drupal_http_request($this->endpoint . '/entity_' . $entity_type . '/count', $options);
-    $data = json_decode($response->data);
-
-    // Check if login was successful.
-    $this->handleRestError($response);
-
-    return $data;
-  }
-
   /**
    * Provide a map of remote property types to Drupal types.
    *

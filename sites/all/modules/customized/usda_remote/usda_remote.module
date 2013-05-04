@@ -1,7 +1,5 @@
 <?php
 
-define('USDA_INGREDIENT_JS_FILENAME', 'ingredients.js');
-
 /**
  * Implements hook_clients_connection_type_info().
  */
@@ -214,8 +212,8 @@ function usda_remote_admin_access($op, $type = NULL, $account = NULL) {
  * Implements hook_remote_entity_query_table_info().
  *
  * NOTE: This is here to prevent a PHP warning in
- * remote_entity_get_query_table_info(). This will be
- * unneccessary once the remote_entity is released.
+ * remote_entity_get_query_table_info(). This should be
+ * unneccessary once remote_entity is released.
  */
 function usda_remote_remote_entity_query_table_info() {
   return array(
