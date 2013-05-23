@@ -523,5 +523,10 @@ function recipe_update_7201(&$sandbox) {
  * Install fields for recipe nodes.
  */
 function recipe_install_fields() {
+  // field conversions
+  module_load_include('inc', 'recipe', 'recipe.field');
+
   // Add your code here
+
+  variable_set('recipe_fields_installed', TRUE);
 }
