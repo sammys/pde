@@ -157,15 +157,24 @@ function drush_pde_print_entity($entity, $type = NULL) {
   foreach ($wrapper as $pkey => $property) {
     // $wrapper->$pkey === $property
     if (isset($info[$pkey]['field']) && $info[$pkey]['field']) {
-      $key = "$pkey (" . $wrapper->$pkey->type() . ')';
-      $rows[$key] = pde_field_value($wrapper->$pkey);
+      $value = pde_field_value($wrapper->$pkey);
+      if (is_array($value)) {
+        foreach ($value as $i => $v) {
+          $key = $pkey."[$i] (" . $wrapper->$pkey->type() . ')';
+          $rows[$key] = rtrim($v);
+        }
+      }
+      else {
+        $key = "$pkey (" . $wrapper->$pkey->type() . ')';
+        $rows[$key] = rtrim($value);
+      }
     }
     else if ($property instanceof EntityStructureWrapper) {
       $rows[$pkey] = rtrim(pde_structure_value($property));
     }
     else if (!($property instanceof EntityValueWrapper)) {
       $rows[$pkey] = $property->raw()
-        . ' (' . $property->label() . ')'."\nFoo";
+        . ' (' . $property->label() . ')';
     }
     else {
       $rows[$pkey] = $property->value();
@@ -374,22 +383,27 @@ function _pde_print_entity_base_table($entity) {
 }
 
 function pde_field_value($field_wrapper) {
-  if ($field_wrapper instanceof EntityListWrapper) {
-    // Handle EntityListWrapper multi-value fields
-    $output = '';
-    foreach ($field_wrapper as $value) {
-      $output .= pde_field_value($value);
+  try {
+    if ($field_wrapper instanceof EntityListWrapper) {
+      // Handle EntityListWrapper multi-value fields
+      $output = array();
+      foreach ($field_wrapper as $value) {
+        $output[] = pde_field_value($value);
+      }
+    }
+    else if ($field_wrapper instanceof EntityDrupalWrapper) {
+      $output = pde_entity_value($field_wrapper);
+    }
+    else if ($field_wrapper instanceof EntityStructureWrapper) {
+      $output = pde_structure_value($field_wrapper);
+    }
+    else {
+      $output = pde_output(
+        $field_wrapper->value(array('decode' => TRUE)));
     }
   }
-  else if ($field_wrapper instanceof EntityDrupalWrapper) {
-    $output = pde_entity_value($field_wrapper);
-  }
-  else if ($field_wrapper instanceof EntityStructureWrapper) {
-    $output = pde_structure_value($field_wrapper);
-  }
-  else {
-    $output = pde_output(
-      $field_wrapper->value(array('decode' => TRUE)));
+  catch (EntityMetadataWrapperException $e) {
+    return '';
   }
 
   return $output;
