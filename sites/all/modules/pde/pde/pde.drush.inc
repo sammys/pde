@@ -40,6 +40,12 @@ function pde_drush_command() {
     'aliases' => array('dei'),
   ) + $defaults;
 
+  $items['dump-entity-list'] = array(
+    'description' => "Output a list of all entity types available.",
+    'aliases' => array('del'),
+    'required-arguments' => 0,
+  ) + $defaults;
+
   $items['dump-entity-properties'] = array(
     'description' => "Output a dump of an entity's property information.",
     'arguments' => array(
@@ -179,6 +185,17 @@ function drush_pde_print_entity($entity, $type = NULL) {
  */
 function drush_pde_dump_entity_info($type) {
   $info = entity_get_info($type);
+  drush_print_r($info);
+}
+
+/**
+ * Print the entity information of the given entity type.
+ */
+function drush_pde_dump_entity_list() {
+  $info = array();
+  foreach (entity_get_info() as $key => $value) {
+    $info[$key] = $value['label'];
+  }
   drush_print_r($info);
 }
 
