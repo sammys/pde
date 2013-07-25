@@ -1207,28 +1207,6 @@ function recipe_autocomplete_page($string = "", $limit = 10) {
 }
 
 /**
- * Implementation of hook_validate().
- *
- * Errors should be signaled with form_set_error().
- */
-function recipe_node_validate($node, $form, &$form_state) {
-  $return = TRUE;
-
-  foreach ($form_state['values']['recipe_ingredients']['ing'] as $key => $ingredient) {
-    if (empty($ingredient['unit_key']['#value']) && !empty($ingredient['name']['#value'])) {
-      form_set_error("recipe_ingredients][ing][$key][unit_key", t("You must choose a valid unit."));
-      $return = FALSE;
-    }
-  }
-
-  return $return;
-}
-
-
-
-
-
-/**
  * All recipe fields should be run through one of the drupal data checks.
  */
 function recipe_node_sanitize(&$node) {
