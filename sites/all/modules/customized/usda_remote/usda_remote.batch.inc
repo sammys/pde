@@ -24,9 +24,12 @@ function usda_remote_import_data($entity_type, &$context) {
     ;
   }
 
-  if ($context['sandbox']['progress'] < $context['sandbox']['max']) {
+  // For some reason modifications to $context within the catch {} above is ignored by
+  // the Drupal batch API. We workaround by checking if we received the full number
+  // of entities requested.
+  if ($context['sandbox']['current'] == $query->pager['limit'] && $context['sandbox']['progress'] < $context['sandbox']['max']) {
     $context['finished'] = $context['sandbox']['progress'] / (float) $context['sandbox']['max'];
-    $context['message'] = t('Progress: @count/@max <em>!label</em> entities', array('@count' => $context['sandbox']['progress'], '@max' => $context['sandbox']['max'], '!label' => $info['label']));
+    $context['message'] = t('Progress: @count <em>!label</em> entities', array('@count' => $context['sandbox']['progress'], '!label' => $info['label']));
   }
   else {
     $context['results'][] = t('Imported @count !label entities', array('@count' => $context['sandbox']['progress'], '!label' => $info['label']));
