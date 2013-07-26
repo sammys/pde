@@ -4,6 +4,7 @@ version = 7.x-1.0
 core = 7.x
 exclusive = TRUE
 dependencies[] = pde
+dependencies[] = pde_02
 dependencies[] = admin_menu
 dependencies[] = block
 dependencies[] = devel
