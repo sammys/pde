@@ -19,10 +19,10 @@ function pde_profile_form_install_configure_form_alter(&$form, $form_state) {
   $form['admin_account']['account']['pass']['#after_build'][] = 'pde_profile_after_build';
   $form['admin_account']['account']['pass']['#description'] = t('DEFAULT: admin');
 
-  $args = array('!link' => '<a target="_blank" href="http://usda.sammyspets.com/user/register">USDA Nutritional Database Service</a>');
+  $args = array('!link' => '<a target="_blank" href="http://usda.sammyspets.com/user/register">USDA National Nutrient Database Service</a>');
   $form['usda'] = array(
     '#type' => 'fieldset',
-    '#title' => t('Credentials for USDA Remote Data'),
+    '#title' => t('Credentials for USDA National Nutrient Database Service'),
     '#description' => t('Before submitting this form go to the !link user registration page to register for an account.', $args),
     '#tree' => TRUE,
     '#weight' => -1,
