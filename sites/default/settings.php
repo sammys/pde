@@ -213,7 +213,7 @@
 $databases = array();
 $databases['default']['default'] = array(
   'driver' => 'mysql',
-  'database' => 'pde_chapter_08',
+  'database' => 'pde_complete',
   'username' => 'drupal_entities',
   'password' => 'W43wSu4Ym44K',
   'host' => 'localhost',
@@ -565,4 +565,6 @@ $conf['404_fast_html'] = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML+RDFa 1.0//EN"
  * Programming Drupal Entities
  */
 $conf['site_name'] = 'Programming Drupal Entities';
-$conf['site_slogan'] = 'Chapter 8';
+$conf['site_slogan'] = 'Completed';
+
+$conf['install_profile'] = 'pde_profile';
