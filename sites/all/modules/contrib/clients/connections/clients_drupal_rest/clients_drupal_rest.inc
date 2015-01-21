@@ -12,6 +12,19 @@ class clients_connection_drupal_services_rest_7 extends clients_connection_base 
   // ============================================ Connection form methods.
 
   /**
+   * Declare an array of properties which should be treated as credentials.
+   *
+   * This lets the credentials storage plugin know which configuration
+   * properties to take care of.
+   *
+   * @return
+   *  A flat array of property names.
+   */
+  function credentialsProperties() {
+    return array('username', 'password');
+  }
+
+  /**
    * Extra form elements specific to a class's edit form.
    *
    * @param $form_state
@@ -23,14 +36,8 @@ class clients_connection_drupal_services_rest_7 extends clients_connection_base 
   function connectionSettingsFormAlter(&$form, &$form_state) {
     $form['endpoint']['#description'] = t('Remote service URL e.g. http://mysite.com/service-endpoint');
 
-    $form['configuration'] += array(
-      '#type' => 'fieldset',
-      '#title' => t('Configuration'),
-      '#collapsible' => FALSE,
-      '#tree' => TRUE,
-    );
-
-    $form['configuration']['username'] = array(
+    // There is no configuration other than the credentials.
+    $form['credentials']['username'] = array(
       '#type' => 'textfield',
       '#title' => t('Service username'),
       '#size' => 30,
@@ -40,11 +47,11 @@ class clients_connection_drupal_services_rest_7 extends clients_connection_base 
       '#required' => TRUE,
     );
 
-    $password_exists = isset($this->configuration['password']);
+    $password_exists = isset($this->credentials['password']);
     $password_description = $password_exists
       ? t('This should be same as the password on the server you are connecting to. Leave blank unless you need to change this.')
       : t('This should be same as the password on the server you are connecting to.');
-    $form['configuration']['password'] = array(
+    $form['credentials']['password'] = array(
       '#type' => 'password',
       '#title' => t('Service password'),
       '#size' => 30,
@@ -84,11 +91,11 @@ class clients_connection_drupal_services_rest_7 extends clients_connection_base 
       watchdog('clients', 'Error with REST request. Error was code @code with error "@error" and message "@message".', array(
         '@code'     => $response->code,
         '@error'    => $response->error,
-        '@message'  => $response->status_message,
+        '@message'  => isset($response->status_message) ? $response->status_message : '(no message)',
       ));
 
       throw new Exception(t("Clients connection error, got message '@message'.", array(
-        '@message' => $response->status_message,
+        '@message' => isset($response->status_message) ? $response->status_message : $response->error,
       )), $response->code);
     }
   }
@@ -107,25 +114,39 @@ class clients_connection_drupal_services_rest_7 extends clients_connection_base 
    */
   function userLogin() {
     // Based on example code at http://drupal.org/node/910598.
+    $this->credentialsLoad();
+
     $data = array(
-      'username' => $this->configuration['username'],
-      'password' => $this->configuration['password'],
+      'username' => $this->credentials['username'],
+      'password' => $this->credentials['password'],
     );
     $data = http_build_query($data, '', '&');
-    $headers = array();
+
+    $headers = array(
+      'Accept' => 'application/json',
+    );
+
     $options = array(
-      'headers' => array(
-        'Accept' => 'application/json',
-      ),
-      'method' => 'POST',
-      'data' => $data,
+      'headers' => $headers,
+      'method'  => 'POST',
+      'data'    => $data,
     );
 
     $response = drupal_http_request($this->endpoint . '/user/login', $options);
-    $data = json_decode($response->data);
 
     // Check if login was successful.
     $this->handleRestError($response);
+
+    $data = json_decode($response->data);
+
+    // It's possible for the response to have a 200, but the data to be
+    // malformed. This happens for example when the remote site is running a
+    // debugger.
+    if (!is_object($data) || json_last_error() != JSON_ERROR_NONE) {
+      throw new Exception(t("Clients connection error logging in. Data received was: '@data'.", array(
+        '@data' => $response->data,
+      )), $response->code);
+    }
 
     // Set our cookie for subsequent requests.
     $this->cookie = $data->session_name . '=' . $data->sessid;
@@ -142,7 +163,7 @@ class clients_connection_drupal_services_rest_7 extends clients_connection_base 
    * @param $method
    *  The path of the remote resource to retrieve.
    * @param $method_params
-   *  An array of further parameters for the request. This should contain:
+   *  A flat array of further parameters for the request. This should contain:
    *  - The HTTP method.
    *  - (optional) An array of data for the request, such as POST data.
    *
@@ -186,21 +207,99 @@ class clients_connection_drupal_services_rest_7 extends clients_connection_base 
    *  The data from the request response.
    */
   function makeRequest($resource_path, $http_method, $data = array()) {
-    if (!isset($this->cookie)) {
+    // Start by assuming we need to log in.
+    $login_needed = TRUE;
+
+    // If the cookie is already set, we don't need to log in.
+    if (isset($this->cookie)) {
+      $login_needed = FALSE;
+    }
+
+    // If the service is 'user/register' (or services_entity module's copy), we
+    // need to be anonymous.
+    // If you want to use this services as an authenticated user, then use the
+    // 'user/create' service, of which this is an alias.
+    if ($resource_path == 'user/register' || $resource_path == 'entity_user/register') {
+      $login_needed = FALSE;
+
+      // Zap any cookie we might have from a previous request.
+      $this->cookie = NULL;
+    }
+
+    if ($login_needed) {
       $this->userLogin();
     }
 
-    $options = array();
-    // Pass in the login cookie we received previously.
-    $options['headers']['Cookie'] = $this->cookie;
-    $options['data'] = http_build_query($data, '', '&');
-    $options['method'] = $http_method;
+    $data = http_build_query($data, '', '&');
+
+    $headers = array(
+      'Accept' => 'application/json',
+      // Pass in the login cookie we received previously.
+      'Cookie' => $this->cookie,
+    );
+
+    // Add a CSRF token if the method is one that requires it.
+    $non_safe_method = !in_array($http_method, array('GET', 'HEAD', 'OPTIONS', 'TRACE')) || $resource_path == 'user/token';
+    if ($non_safe_method) {
+      $headers['X-CSRF-Token'] = $this->getXCSRFToken();
+    }
+
+    $options = array(
+      'headers' => $headers,
+      'method'  => $http_method,
+      'data'    => $data,
+    );
+
     $response = drupal_http_request($this->endpoint . '/' . $resource_path, $options);
 
     $this->handleRestError($response);
 
     $result = json_decode($response->data);
     return $result;
+  }
+
+  /**
+   * Get the X-CSRF token.
+   *
+   * This calls the remote site to get the token, and caches it, so that
+   * multiple requests made with the same connection don't need to retrieve it
+   * again.
+   *
+   * This expects the 'user/token' action resource to be enabled on the
+   * endpoint. This only exists in Services 3.5 and later. We do not support
+   * earlier versions.
+   *
+   * @return
+   *  The X-CSRF token.
+   *
+   * @throws
+   *  An exception if the remote site does not return a token.
+   */
+  function getXCSRFToken() {
+    if (isset($this->CSRFToken)) {
+      return $this->CSRFToken;
+    }
+
+    $headers = array(
+      'Accept' => 'application/json',
+      // Pass in the login cookie we received previously.
+      'Cookie' => $this->cookie,
+    );
+
+    $options = array(
+      'headers' => $headers,
+      'method'  => 'POST',
+    );
+
+    $response = drupal_http_request($this->endpoint . '/user/token', $options);
+    if ($response->code == 200) {
+      $data = json_decode($response->data);
+      $this->CSRFToken = $data->token;
+      return $this->CSRFToken;
+    }
+    else {
+      throw new Exception(t("Unable to get a CSRF token from the remote site."));
+    }
   }
 
 }

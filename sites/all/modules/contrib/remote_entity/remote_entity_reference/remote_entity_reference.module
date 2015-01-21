@@ -16,6 +16,8 @@ function remote_entity_reference_field_info() {
       'instance_settings' => array(),
       'default_widget' => 'remote_entref_autocomplete',
       'default_formatter' => 'remote_entref_default',
+      // Entity Metadata API support.
+      'property_type' => 'text',
     ),
   );
 }

@@ -81,6 +81,53 @@ class clients_resource_remote_entity extends clients_resource_base {
   public $remoteEntityQuery;
 
   /**
+   * Load multiple remote entities.
+   *
+   * Takes care of calling process_remote_entities() on the controller
+   * for the retrieved remote entity. This in turn saves a local copy of the
+   * remote entity.
+   *
+   * If the connection supports remote_entity_load_multiple(), then this uses
+   * it; otherwise, it's the same as calling this class's remote_entity_load().
+   *
+   * Connections implementing remote_entity_load_multiple() should consider
+   * practical limitations to the number of entities that can be retrieved in a
+   * single request, and in light of this split the operation into several
+   * requests.
+   *
+   * @param $ids
+   *  An array of the (remote) entity IDs.
+   *
+   * @return
+   *  An array of local entities, keyed by the local entity IDs.
+   */
+  function remote_entity_load_multiple($ids) {
+    $connection = $this->getConnection();
+    $entity_type = $this->component;
+
+    if (method_exists($connection, 'remote_entity_load_multiple')) {
+      $remote_entities = $connection->remote_entity_load_multiple($entity_type, $ids);
+    }
+    else {
+      // Fall back to single entity load.
+      $remote_entities = array();
+      foreach ($ids as $id) {
+        $remote_entities[] = $connection->remote_entity_load($entity_type, $id);
+      }
+    }
+
+    if (!empty($remote_entities)) {
+      $controller = entity_get_controller($this->component);
+      // The controller's process_remote_entities() doesn't care about the key
+      // of the array of remote entities.
+      $entities = $controller->process_remote_entities($remote_entities);
+
+      return $entities;
+    }
+    return array();
+  }
+
+  /**
    * Load a remote entity.
    *
    * Takes care of calling process_remote_entities() on the controller
@@ -124,15 +171,77 @@ class clients_resource_remote_entity extends clients_resource_base {
    *  ignore this.
    *
    * @return
-   *  If the entity is being created remotely, the new remote ID.
+   *  If the entity is being created remotely, the new remote ID. If the entity
+   *  is updated, NULL.
    */
   function remote_entity_save($entity, $remote_properties = array()) {
     $connection = $this->getConnection();
     $entity_type = $this->component;
 
+    // Handle a read-only connection.
+    if (!empty($connection->configuration['read_only'])) {
+      // If there is no remote ID yet, simulate an insert.
+      if (empty($entity->remote_id)) {
+        return $connection->generateDummyRemoteID();
+      }
+      // Return nothing to simulate a save.
+      return;
+    }
+
     // Hand over to the connection to perform specialized tasks.
     $return = $connection->remote_entity_save($entity_type, $entity, $remote_properties);
 
+    return $return;
+  }
+
+  /**
+   * Save multiple entities remotely, using bulk saving methods on the remote.
+   *
+   * This falls back to the single remote_entity_save() if the underlying
+   * connection does not have a remote_entity_save_multiple() method.
+   *
+   * @param $entities
+   *  An array of entities to save in bulk, keyed by the entity ID.
+   * @param $remote_properties
+   *  Same as remote_entity_save().
+   *
+   * @return
+   *  An array of remote IDs created by the remote save. The array is keyed by
+   *  entity ID. Only entities which were inserted remotely (rather than
+   *  updated) are included.
+   */
+  public function remote_entity_save_multiple($entities, $remote_properties) {
+    $connection = $this->getConnection();
+
+    // For a read-only connection, there is no performance improvement to be
+    // achieved anyway, so we fall back to the single save method and rely on
+    // its handling of the read-only case.
+    if (!empty($connection->configuration['read_only'])) {
+      $fall_back_to_single = TRUE;
+    }
+
+    // Check our connection has the method needed, and fall back to the single
+    // method if we don't have it.
+    $connection = $this->getConnection();
+    if (!method_exists($connection, 'remote_entity_save_multiple')) {
+      $fall_back_to_single = TRUE;
+    }
+
+    if (!empty($fall_back_to_single)) {
+      $return = array();
+      foreach ($entities as $eid => $entity) {
+        $remote_id = $this->remote_entity_save($entity, $remote_properties);
+        // Only populate the return array with actual values; updates don't get
+        // us a remote ID.
+        if (!empty($remote_id)) {
+          $return[$eid] = $remote_id;
+        }
+      }
+      return $return;
+    }
+
+    $entity_type = $this->component;
+    $return = $connection->remote_entity_save_multiple($entity_type, $entities, $remote_properties);
     return $return;
   }
 
@@ -158,7 +267,8 @@ class clients_resource_remote_entity extends clients_resource_base {
    * Execute the current RemoteEntityQuery, and process and save the result.
    *
    * @return
-   *  An array of local entities, which have been saved.
+   *  An array of local entities, which have been saved. These are keyed by
+   *  entity ID.
    */
   function executeRemoteEntityQuery() {
     $remote_entities = $this->remoteEntityQuery->execute();

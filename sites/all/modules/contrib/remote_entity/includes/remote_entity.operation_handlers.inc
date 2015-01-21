@@ -32,7 +32,7 @@ class RemoteEntityEntityOperationsOperationRemoteDevel extends EntityOperationsO
   /**
    * Page callback.
    */
-  function page($entity_type, $entity, $params = array()) {
+  function build($entity_type, $entity, $params = array()) {
     if (!isset($entity->remote_id)) {
       return t('This entity does not exist remotely.');
     }
@@ -55,6 +55,11 @@ class RemoteEntityEntityOperationsOperationRemoteDevel extends EntityOperationsO
  * Requires Entity Operations module.
  */
 class RemoteEntityEntityOperationsOperationRemoteSave extends EntityOperationsOperationAction {
+
+  /**
+   * The operation for entity_access().
+   */
+  public $access_verb = 'remote save';
 
   /**
    * Returns strings for the operations.
@@ -127,7 +132,7 @@ class RemoteEntityEntityOperationsOperationRemoteSaveUnpack extends EntityOperat
   /**
    * Page callback.
    */
-  function page($entity_type, $entity, $params = array()) {
+  function build($entity_type, $entity, $params = array()) {
     $controller = entity_get_controller($entity_type);
     $controller->unpack($entity);
 

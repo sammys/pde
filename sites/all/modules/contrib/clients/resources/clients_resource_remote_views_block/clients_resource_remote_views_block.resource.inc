@@ -78,7 +78,7 @@ class clients_resource_remote_view_block extends clients_resource_base {
     }
 
     try {
-      $result = $connection->callMethodArray('views.get', array(
+      $result = $connection->callMethodArray('views.retrieve', array(
         $this->configuration['view'],
         $this->configuration['display'],
         $arguments,

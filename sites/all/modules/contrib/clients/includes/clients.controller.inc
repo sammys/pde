@@ -37,22 +37,55 @@ class ClientsHandlerEntityController extends EntityAPIControllerExportable {
    * @see DrupalDefaultEntityController#load($ids, $conditions)
    */
   public function load($ids = array(), $conditions = array()) {
+    // Disable the static cache until we are finished loading entities. This is
+    // because the parent load() will want to cache the entities it loads as
+    // plain entities rather than handler entities; after that's been done, we
+    // can't write out handler entities to cache again without unsetting them
+    // from the cache or emptying it, both of which are inefficient.
+    // (We can't use $cache here, as that would disable loading from cache too.)
+    $this->cache_set = FALSE;
+
     // Call the parent to load the entities.
-    // This gets us StdClass objects.
+    // This gets us StdClass objects if the entities were not previously cached.
     $entities = parent::load($ids, $conditions);
 
     // Copy the loaded entity object to the right class for its type.
     $return = array();
-    foreach ($entities as $name => $entity_data) {
+    foreach ($entities as $name => $plain_entity) {
       // Get the class to use.
-      $class = $this->getClass($entity_data);
+      $class = $this->getClass($plain_entity);
 
-      // The connection's __construct() takes over from here.
-      $entity = new $class((array) $entity_data, $this->entityType);
-      $return[$name] = $entity;
+      if ($plain_entity instanceof $class) {
+        // If the object is already of the correct class, then it was loaded
+        // from the internal controller cache, and we're done.
+        $return[$name] = $plain_entity;
+      }
+      else {
+        // Otherwise, we need to remake the object to be of the handler class.
+        // The connection's __construct() takes over from here.
+        $entity = new $class((array) $plain_entity, $this->entityType);
+        $return[$name] = $entity;
+      }
     }
 
+    // Turn static caching back on.
+    $this->cache_set = TRUE;
+
+    $this->cacheSet($return);
+
     return $return;
+  }
+
+  /**
+   * Overridden.
+   * @see DrupalDefaultEntityController::cacheSet()
+   */
+  protected function cacheSet($entities) {
+    // Only set the static cache if our own flag is set.
+    // @see load().
+    if ($this->cache_set) {
+      parent::cacheSet($entities);
+    }
   }
 
   /**
@@ -98,6 +131,33 @@ class ClientsHandlerEntityController extends EntityAPIControllerExportable {
     else {
       return $this->entityInfo['factory']['broken class'];
     }
+  }
+
+}
+
+/**
+ * Controller class for Connections.
+ */
+class ClientsConnectionHandlerEntityController extends ClientsHandlerEntityController {
+
+  /**
+   * Implements EntityAPIControllerInterface.
+   *
+   * Takes care of deleting stored credentials when connections are deleted.
+   *
+   * @param $transaction
+   *   Optionally a DatabaseTransaction object to use. Allows overrides to pass
+   *   in their transaction object.
+   */
+  public function delete($ids, DatabaseTransaction $transaction = NULL) {
+    $connections = entity_load('clients_connection', $ids);
+
+    foreach ($connections as $connection) {
+      $credentials_storage_plugin = $connection->get_credentials_storage_plugin();
+      $credentials_storage_plugin->credentialsDelete($connection);
+    }
+
+    parent::delete($ids, $transaction);
   }
 
 }

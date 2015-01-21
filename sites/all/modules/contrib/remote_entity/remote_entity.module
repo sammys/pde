@@ -9,8 +9,28 @@
  *    - remote entity name
  *    - whether to sync locally
  *    - ??
- *  - Custom entity property controller: maps properties to remote service properties.
+ *  - Custom entity property controller: maps properties to remote service
+ *    properties.
+ *
+ * Note: when relying on this module in Simpletests, a second cache clear is
+ * needed after enabling modules (@code $this->resetAll() @endcode). This is
+ * due to our hook_views_data_alter() not having access to entity metadata for
+ * new remote entity types.
  */
+
+/**
+ * Status for needs_remote_save entity property indicating a save is required.
+ *
+ * @see remote_entity_schema_table()
+ */
+define('REMOTE_ENTITY_REMOTE_SAVE_NEEDED', 1);
+
+/**
+ * Status for needs_remote_save entity property indicating failed save attempt.
+ *
+ * @see remote_entity_schema_table()
+ */
+define('REMOTE_ENTITY_REMOTE_SAVE_FAILED', 2);
 
 /**
  * Load an entity by remote ID.
@@ -24,7 +44,7 @@
  * @param $remote_id
  *   The remote ID of the entity.
  *
- * @result
+ * @return
  *  A fully loaded entity object, refreshed from remote if necessary, or NULL
  *  if nothing found.
  */
@@ -50,12 +70,34 @@ function remote_entity_load_by_remote_id($entity_type, $remote_id) {
 }
 
 /**
- * Save an entity to the remote source.
+ * Load an entity from remote, bypassing any local data and processing.
+ *
+ * This loads only remote data. The Entity controller is not used at all, and
+ * the local copy of the entity, if one exists, is ignored and untouched.
  *
  * @param $entity_type
  *   The type of the entity.
  * @param $remote_id
  *   The remote ID of the entity.
+ *
+ * @return
+ *  The remote data object, if found.
+ */
+function remote_entity_load_remote($entity_type, $remote_id) {
+  $resource = clients_resource_get_for_component('remote_entity', $entity_type);
+  $connection = $resource->getConnection();
+  $remote_entity = $connection->remote_entity_load($entity_type, $remote_id);
+
+  return $remote_entity;
+}
+
+/**
+ * Save an entity to the remote source.
+ *
+ * @param $entity_type
+ *   The type of the entity.
+ * @param $entity
+ *   The entity to save.
  * @param $remote_properties
  *   (Optional) An array of properties to save. Values should be names of
  *   properties which are keys in the entity info 'property map' array. Only
@@ -64,6 +106,24 @@ function remote_entity_load_by_remote_id($entity_type, $remote_id) {
  */
 function remote_entity_save($entity_type, $entity, $remote_properties = array()) {
   entity_get_controller($entity_type)->remote_save($entity, $remote_properties);
+}
+
+/**
+ * Save multiple entities to the remote source.
+ *
+ * @param $entity_type
+ *   The type of the entity.
+ * @param $entities
+ *   An array of entities to save remotely, keyed by entity id. They should
+ *   already have been saved locally.
+ * @param $remote_properties
+ *   (Optional) An array of properties to save. Values should be names of
+ *   properties which are keys in the entity info 'property map' array. Only
+ *   applies when updating rather than inserting. Client connection types may
+ *   ignore this.
+ */
+function remote_entity_save_multiple($entity_type, $entities, $remote_properties = array()) {
+  entity_get_controller($entity_type)->remote_save_multiple($entities, $remote_properties);
 }
 
 /**
@@ -99,6 +159,10 @@ function remote_entity_entity_label($entity, $entity_type) {
  *  The data from hook implementations, with defaults values added in.
  */
 function remote_entity_get_query_table_info($connection_name, $remote_table = NULL) {
+  // Table data is defined by connection name, so we need to get the 'original'
+  // connection name in case we're using an environment substitute.
+  $connection_name = clients_connection_get_substituted_name($connection_name);
+
   // This is used by query classes, so static caching can be done there.
   $cache_id = 'remote_entity_query_table_info:' . $connection_name;
   if ($cache = cache_get($cache_id)) {
@@ -106,10 +170,12 @@ function remote_entity_get_query_table_info($connection_name, $remote_table = NU
   }
   else {
     $hook_data = module_invoke_all('remote_entity_query_table_info');
+    drupal_alter('remote_entity_query_table_info', $hook_data);
+
     // Add in defaults.
     // We only bother processing and caching for the connection we've been
     // asked for.
-    $connection_data = $hook_data[$connection_name];
+    $connection_data = isset($hook_data[$connection_name]) ? $hook_data[$connection_name] : array();
     foreach ($connection_data as $table => $table_data) {
       $connection_data[$table] += array(
         'fields' => array(),
@@ -120,7 +186,7 @@ function remote_entity_get_query_table_info($connection_name, $remote_table = NU
     cache_set($cache_id, $connection_data);
   }
 
-  if (isset($remote_table)) {
+  if (isset($remote_table) && isset($connection_data[$remote_table])) {
     return $connection_data[$remote_table];
   }
   else {
@@ -129,6 +195,46 @@ function remote_entity_get_query_table_info($connection_name, $remote_table = NU
 }
 
 // ============================================ Drupal core hooks
+
+/**
+ * Implements hook_menu().
+ */
+function remote_entity_menu() {
+  $items['admin/reports/remote-entities'] = array(
+    'title' => 'Remote entities',
+    'description' => 'Shows a summary of the remote entities',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('remote_entity_page_report_form'),
+    'file' => 'includes/remote_entity.admin.inc',
+    'access arguments' => array('access remote entities overview'),
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_modules_enabled().
+ */
+function remote_entity_modules_enabled($modules) {
+  // Clear all our caches.
+  cache_clear_all('remote_entity_query_table_info:', 'cache', TRUE);
+}
+
+/**
+ * Implements hook_permission().
+ */
+function remote_entity_permission() {
+  return array(
+    'access remote entities overview' => array(
+      'title' => t('Access remote entities report'),
+      'description' => t("View the overview remote entities showing how many are pending remote save and how many have failed to save remotely."),
+    ),
+    're-attempt remote save of remote entities' => array(
+      'title' => t('Re-attempt remote save of entities'),
+      'description' => t("Re-attempt a remote save of remote entities that have been flagged as having failed a remote save."),
+    ),
+  );
+}
 
 /**
  * Implements hook_cron().
@@ -217,7 +323,17 @@ function remote_entity_clients_resource_type_info() {
   );
 }
 
-// ============================================ Entity Metadata API
+// ============================================ Entity / Entity Metadata API
+
+/**
+ * Implements hook_ENTITY_TYPE_defaults_rebuild().
+ */
+function remote_entity_clients_connection_defaults_rebuild($entities, $originals) {
+  // Force a rebuild of the entity property info, as we ducked out from making
+  // our contribution in the Entity metadata controller class
+  // RemoteEntityAPIDefaultMetadataController::entityPropertyInfo().
+  entity_property_info_cache_clear();
+}
 
 /**
  * Property getter callback for properties defined in 'remote entity keys'.
@@ -269,8 +385,25 @@ function remote_entity_entity_mapped_property_set(&$data, $name, $value, $langco
     $data['entity_data']->{$remote_property} = $value;
   }
   elseif (is_object($data)) {
+    if (!isset($data->entity_data)) {
+      $data->entity_data = new StdClass;
+    }
+
     $data->entity_data->{$remote_property} = $value;
   }
+}
+
+/**
+ * Implements callback_entity_property_options_list().
+ *
+ * Options list callback for the 'needs_remote_save' property.
+ */
+function remote_entity_entity_needs_remote_save_options_list($name, $info, $op) {
+  return array(
+    0 => t("No remote save needed"),
+    1 => t("Needs remote save"),
+    REMOTE_ENTITY_REMOTE_SAVE_FAILED => t("Last remote save attempt failed"),
+  );
 }
 
 /**
@@ -278,6 +411,9 @@ function remote_entity_entity_mapped_property_set(&$data, $name, $value, $langco
  *
  * Shadows the remote property to or from an entity schema property of the
  * same name.
+ *
+ * For example, use this to shadow data between the remote data property
+ * $entity->entity_data->foo and the schema property $entity->foo.
  */
 function remote_entity_shadowing_schema_property_verbatim($entity, $property_name, $entity_type, $property_info, $direction) {
   if ($direction == 'local to remote') {
@@ -293,8 +429,46 @@ function remote_entity_shadowing_schema_property_verbatim($entity, $property_nam
     $wrapper = entity_metadata_wrapper($entity_type, $entity);
     $value = $wrapper->{$property_name}->raw();
 
-    // Set it on a FieldAPI field.
+    // Set it on the entity schema property directly.
     $entity->{$property_name} = $value;
+  }
+}
+
+/**
+ * Implements callback_remote_entity_property_info_shadow_property().
+ *
+ * Shadows the remote property to or from an entity property whose name
+ * is given in the property data. This supports both schema properties (i.e. a
+ * database column) and FieldAPI properties (i.e. a value in a field on the
+ * entity).
+ *
+ * The property name must be set in the 'remote property shadowing' properties
+ * array as 'local property'.
+ *
+ * For example, use this to shadow data between the remote data property
+ * $entity->entity_data->foo and the schema property $entity->bar, where 'bar'
+ * can either be a schema property or a FieldAPI field.
+ */
+function remote_entity_shadowing_schema_property_verbatim_named($entity, $property_name, $entity_type, $property_info, $direction) {
+  $local_property_name = $property_info['remote property shadowing']['local property'];
+
+  if ($direction == 'local to remote') {
+    // Get a value from the schema property.
+    $wrapper = entity_metadata_wrapper($entity_type, $entity);
+    $value = $wrapper->{$local_property_name}->raw();
+
+    // Return the value for the API to set it.
+    return $value;
+  }
+
+  if ($direction == 'remote to local') {
+    // Get the value from the remote property.
+    $wrapper = entity_metadata_wrapper($entity_type, $entity);
+    $value = $wrapper->{$property_name}->raw();
+
+    // Set it on the entity directly, either a schema property or a FieldAPI
+    // property.
+    $entity->{$local_property_name} = $value;
   }
 }
 

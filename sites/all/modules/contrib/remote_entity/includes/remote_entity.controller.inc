@@ -44,8 +44,11 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
     $entities = parent::load($ids, $conditions);
     //dsm($entities, 'CONTROLLER load');
 
-    // Check for expiry, allowing the controller setting to bypass this.
-    if (!$this->bypass_remote_retrieve) {
+    // Check each entity for expiry, if the entity type supports it. We also
+    // allow the controller setting to bypass this.
+    if (!empty($this->entityInfo['expiry']) && !$this->bypass_remote_retrieve) {
+      // Assemble a list of expired entities, to remote load them in bulk.
+      $expired_entity_remote_ids = array();
       foreach ($entities as $id => $entity) {
         // A value of 0 for the expiry means it doesn't expire.
         if (!empty($entity->expires) && $entity->expires < REQUEST_TIME) {
@@ -55,21 +58,24 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
             continue;
           }
 
-          // Fetch the remote copy and update.
-          $remote_id = $entity->remote_id;
+          $expired_entity_remote_ids[$id] = $entity->remote_id;
+        }
+      }
 
-          $resource = clients_resource_get_for_component('remote_entity', $this->entityType);
-          // Load the remote entity. This in turn:
-          // - calls the connection to build a RemoteEntityQuery
-          // - calls us to take care of doing the packing and the saving.
-          $remote_entity = $resource->remote_entity_load($remote_id);
-          //dsm($remote_entity, 'controller load fetched entity from remote!');
+      // If any entities require a refresh from remote, remote load them.
+      if ($expired_entity_remote_ids) {
+        $resource = clients_resource_get_for_component('remote_entity', $this->entityType);
+        // Load the remote entities. This in turn:
+        // - calls the connection to build a RemoteEntityQuery
+        // - calls us to take care of doing the packing and the saving.
+        $refreshed_entities = $resource->remote_entity_load_multiple($expired_entity_remote_ids);
 
-          // Replace the entity in the array, it is now stale.
-          // Only return something if the entity exists: if nothing has come
-          // back then the remote entity has vanished on the remote site.
-          if (!empty($remote_entity)) {
-            $entities[$id] = $remote_entity;
+        // Replace the entities in the array, they are now stale.
+        // Only return something if the entity exists: if nothing has come
+        // back then the remote entity has vanished on the remote site.
+        foreach ($refreshed_entities as $id => $refreshed_entity) {
+          if (!empty($refreshed_entity)) {
+            $entities[$id] = $refreshed_entity;
           }
           // TODO: if the remote entity is gone, should we delete locally, or
           // is that overstepping our bounds and something to be figured out
@@ -84,8 +90,8 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
   /**
    * Load a local copy of an entity by remote id.
    *
-   * This bypasses everything else and should be used to get a local copy when
-   * comparing it or associating it to a retrieved remote.
+   * This should be used to get a local copy when comparing it or associating it
+   * to a retrieved remote.
    *
    * @param $remote_id
    *  The remote ID of the entity. This is saved in the 'remote_id' column in
@@ -93,16 +99,11 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
    *  entity info.
    *
    * @return
-   *  Either an entity object (without FieldAPI fields) or NULL if none found.
+   *  Either an entity or NULL if none found.
    */
   public function local_load_by_remote_id($remote_id) {
-    $result = $this->query(FALSE, array('remote_id' => $remote_id));
-    foreach ($result as $record) {
-      // The remote ID is unique; there should be only one.
-      $entity = $record;
-      $entity->entity_data = unserialize($entity->entity_data);
-      return $entity;
-    }
+    $entities = $this->load(FALSE, array('remote_id' => $remote_id));
+    return reset($entities);
   }
 
   /**
@@ -158,6 +159,13 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
    *  applies when updating rather than inserting. Client connection types may
    *  ignore this.
    *
+   * @throws Exception
+   *  Re-throws exceptions from the client connection, after setting the failed
+   *  entity's 'needs_remote_save' property to REMOTE_ENTITY_REMOTE_SAVE_FAILED.
+   *  This ensures the problem entity will not attempt to save again, but is
+   *  flagged for inspection. Note that the change in the property entails a
+   *  local save, which in turn will update the 'changed' property.
+   *
    * @see clients_resource_remote_entity::remote_entity_save()
    * @see callback_remote_entity_unpack()
    */
@@ -170,15 +178,28 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
     // By default this does nothing, but subclasses may wish to override this.
     $this->unpack($entity, $remote_properties);
 
-    // Invoke callback_remote_entity_unpack() to allow the entity's module to
-    // set properties on the remote data before we save it.
-    if (isset($this->entityInfo['remote entity unpack callback'])) {
-      $callback = $this->entityInfo['remote entity unpack callback'];
-      $callback($this->entityType, $entity);
-    }
-
     $resource = clients_resource_get_for_component('remote_entity', $this->entityType);
-    $remote_id = $resource->remote_entity_save($entity, $remote_properties);
+
+    // The connection may throw an exception is there is a problem with the
+    // remote server.
+    try {
+      $remote_id = $resource->remote_entity_save($entity, $remote_properties);
+    }
+    catch (Exception $e) {
+      // Save the entity locally, marking it as having failed remote save.
+      $entity->needs_remote_save = REMOTE_ENTITY_REMOTE_SAVE_FAILED;
+
+      // We flag this as a remote save (even if just a failed attempt), in case
+      // the entity's normal save workflow needs to be aware of this.
+      $entity->is_remote_save = TRUE;
+      $this->save($entity);
+
+      // Clear the flag.
+      $entity->is_remote_save = TRUE;
+
+      // Re-throw the exception.
+      throw $e;
+    }
 
     // If creating a new entity remotely, we receive its new ID.
     if (isset($remote_id)) {
@@ -197,24 +218,134 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
     $entity->needs_remote_save = FALSE;
 
     // Save the entity locally, so the remote ID and timestamp are saved.
+    // We flag this as a remote save, in case the entity's normal save workflow
+    // needs to be aware of this.
+    $entity->is_remote_save = TRUE;
     $this->save($entity);
+
+    // Clear the flag.
+    $entity->is_remote_save = TRUE;
+  }
+
+  /**
+   * Save multiple entities remotely.
+   *
+   * @param $entities
+   *   An array of entities to save remotely, keyed by entity id. They should
+   *   already have been saved locally, though there can be a mix of remote
+   *   inserts and updates.
+   * @param $remote_properties
+   *   (Optional) An array of properties to save. Values should be names of
+   *   properties which are keys in the entity info 'property map' array. Only
+   *   applies for entities which are about to be updated rather than inserted.
+   *   Client connection types may ignore this.
+   */
+  public function remote_save_multiple($entities, $remote_properties) {
+    // First check whether our connection supports this.
+    $resource = clients_resource_get_for_component('remote_entity', $this->entityType);
+
+    // Set ourselves to bypass remote retrievals, as we don't want any
+    // save operation (which calls load()!) to result in a remote load.
+    $this->bypass_remote_retrieve = TRUE;
+
+    // Unpack the remote data from each entity.
+    // By default this does nothing, but entity types may override this or
+    // define callbacks.
+    foreach ($entities as $entity) {
+      $this->unpack($entity, $remote_properties);
+    }
+
+    // Save the entities using the resource.
+    try {
+      $remote_ids = $resource->remote_entity_save_multiple($entities, $remote_properties);
+    }
+    catch (Exception $e) {
+      // We assume that the connection can't tell us which of the entities
+      // had the problem. So we can only mark all of them as being a problem.
+      foreach ($entities as $eid => $entity) {
+        // Mark the entity as having failed remote save.
+        $entity->needs_remote_save = REMOTE_ENTITY_REMOTE_SAVE_FAILED;
+
+        // We flag this as a remote save (even if just a failed attempt), in case
+        // the entity's normal save workflow needs to be aware of this.
+        $entity->is_remote_save = TRUE;
+        $this->save($entity);
+
+        // Clear the flag.
+        $entity->is_remote_save = TRUE;
+      }
+
+      // Re-throw the exception.
+      throw $e;
+    }
+
+    // Update our local copy of each entity.
+    $remote_id_key = $this->entityInfo['remote entity keys']['remote id'];
+    foreach ($entities as $eid => $entity) {
+      // The $remote_ids array will contain remote IDs for any entities which
+      // were created remotely. If there's a remote ID, need to set it on the
+      // local copy.
+      if (isset($remote_ids[$eid])) {
+        // Set this into the remote ID property.
+        $entity->remote_id = $remote_ids[$eid];
+
+        // Set the remote ID into the remote data.
+        $entity->entity_data->{$remote_id_key} = $remote_ids[$eid];
+      }
+
+      // Set the time at which this was last saved remotely.
+      $entity->remote_saved = REQUEST_TIME;
+
+      // Clear the flag now we've saved it.
+      $entity->needs_remote_save = FALSE;
+
+      // Save the entity locally, so the remote ID and timestamp are saved.
+      // We flag this as a remote save, in case the entity's normal save workflow
+      // needs to be aware of this.
+      $entity->is_remote_save = TRUE;
+      $this->save($entity);
+
+      // Clear the flag.
+      $entity->is_remote_save = TRUE;
+    }
+
+    // Remove the bypass to restore normal operation.
+    $this->bypass_remote_retrieve = FALSE;
   }
 
   /**
    * Get a new RemoteEntityQuery object appropriate for this entity type.
    *
+   * @param $bundle_name
+   *  (optional) The name of a bundle of this entity to query for. This requires
+   *  the 'remote entity conditions' property to be set in the entity info for
+   *  the requested bundle.
+   *
    * @return
    *  A RemoteEntityQuery object with the base already set for our entity type.
    *  This should be executed by passing it to executeRemoteEntityQuery().
    *
-   * @see RemoteEntityAPIDefaultController::getRemoteEntityQuery()
+   * @see clients_resource_remote_entity::getRemoteEntityQuery()
    */
-  function getRemoteEntityQuery() {
+  function getRemoteEntityQuery($bundle_name = NULL) {
     $resource = clients_resource_get_for_component('remote_entity', $this->entityType);
     $connection = $resource->getConnection();
     $query = $connection->getRemoteEntityQuery();
     // Set the base of the query.
     $query->base($this->entityType);
+
+    if (isset($bundle_name)) {
+      $bundle_info = $this->entityInfo['bundles'][$bundle_name];
+      if (!isset($bundle_info['remote entity conditions'])) {
+        throw new Exception(t("Requested bundle @bundle does not have its remote entity conditions set in the entity info.", array(
+          '@bundle' => $bundle_name,
+        )));
+      }
+
+      foreach ($bundle_info['remote entity conditions'] as $condition_property => $condition_value) {
+        $query->fieldRemoteCondition($condition_property, $condition_value);
+      }
+    }
 
     // Invoke callback_remote_entity_query_defaults() with the query.
     // This can be used to set conditions or relationships that should be on
@@ -255,13 +386,14 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
    *  with a RemoteEntityQuery.
    *
    * @return
-   *  An array of local entities, keyed by entity id.
+   *  An array of fully loaded local entities, keyed by entity id.
    *
    * @see clients_resource_remote_entity::executeRemoteEntityQuery()
    */
   public function process_remote_entities($remote_entities) {
-    // Set ourselves to bypass remote retrievals, as we don't want the
-    // save operation (which calls load()!) to result in circularity.
+    // Set ourselves to bypass remote retrievals, as we don't want either the
+    // load in pack() or the save operation (which calls load()!) to result in
+    // circularity.
     $this->bypass_remote_retrieve = TRUE;
 
     $entities = array();
@@ -334,6 +466,15 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
         'created' => REQUEST_TIME,
         'updated' => REQUEST_TIME,
       );
+
+      // If our entity type needs a bundle key setting, we have to figure out
+      // the bundle to set based on the incoming data.
+      if (!empty($this->entityInfo['entity keys']['bundle'])) {
+        $bundle_name = $this->getNewEntityBundle($remote_entity);
+
+        $values[$this->entityInfo['entity keys']['bundle']] = $bundle_name;
+      }
+
       $entity = $this->create($values);
 
       // Set the remote data.
@@ -344,13 +485,19 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
     }
 
     // Shadow data from remote properties to local ones.
+    // Get our properties. We get them from the wrapper rather than use
+    // entity_get_property_info() so that EntityDrupalWrapper::spotBundleInfo()
+    // can add/override properties from bundles. This allows bundle-specific
+    // property shadowing.
     // TODO: consider moving this functionality out to a helper method.
-    $properties = entity_get_property_info($this->entityType);
-    $properties = $properties['properties'];
+    $wrapper = entity_metadata_wrapper($this->entityType, $entity);
+    $properties = $wrapper->getPropertyInfo();
+
     // Intersect with all the remote properties.
     $properties = array_intersect_key($properties, $this->entityInfo['property map']);
 
     foreach ($properties as $property_name => $property_info) {
+      // Invoke callback_remote_entity_property_info_shadow_property().
       if (isset($property_info['remote property shadowing']['remote to local callback'])) {
         $callback = $property_info['remote property shadowing']['remote to local callback'];
         $callback($entity, $property_name, $this->entityType, $property_info, 'remote to local');
@@ -361,7 +508,64 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
   }
 
   /**
+   * Helper for pack() to get the bundle of a new entity based on remote data.
+   *
+   * This considers an array of conditions in the info for each bundle. If all
+   * the conditions pass, then the bundle is the desired one. It is up to
+   * implementors to ensure that their bundle conditions will always match the
+   * remote entities they query for.
+   *
+   * @param $remote_entity
+   *  A remote entity object, as received by pack().
+   *
+   * @return
+   *  The bundle name for the new entity.
+   *
+   * @throws
+   *  Exception if no bundle name found.
+   */
+  protected function getNewEntityBundle($remote_entity) {
+    foreach ($this->entityInfo['bundles'] as $bundle_name => $bundle_info) {
+      if (isset($bundle_info['remote entity conditions'])) {
+        $bundle_conditions_apply = FALSE;
+        foreach ($bundle_info['remote entity conditions'] as $condition_property => $condition_value) {
+          // All conditions defined in the bundle info must pass.
+          if ($remote_entity->$condition_property == $condition_value) {
+            $bundle_conditions_apply = TRUE;
+          }
+          else {
+            // One failed: this bundle is no good. Give up on it.
+            $bundle_conditions_apply = FALSE;
+            break;
+          }
+        }
+
+        // If the bundle passed, it's the right one.
+        // (It's up to implementors to ensure their conditions are mutually
+        // exclusive!)
+        if ($bundle_conditions_apply) {
+          return $bundle_name;
+        }
+      }
+    }
+
+    // If we get here then no bundle name matched.
+    $remote_id_key = $this->entityInfo['remote entity keys']['remote id'];
+    throw new Exception(t("No bundle name found for remote entity id '@id'.", array(
+      '@id' => $remote_entity->{$remote_id_key},
+    )));
+  }
+
+  /**
    * Unpacks remote entity data from the local entity for remote saving.
+   *
+   * Properties on the remote entity may be set on it prior to saving. This is
+   * referred to as 'shadowing', as the main use case is mapping data from
+   * schema properties or Field API fields into remote entity properties. This
+   * is determined by the 'remote property shadowing' section of the metadata
+   * property info defined in hook_entity_property_info().
+   *
+   * If a shadowing callback returns NULL, it is skipped.
    *
    * @param $entity
    *  An entity which is to be saved remotely.
@@ -371,13 +575,19 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
    *  properties which are keys in the entity info 'property map' array. Only
    *  applies when updating rather than inserting. If empty, all properties will
    *  be updated.
+   *
+   * @see remote_entity_hook_entity_property_info()
    */
   public function unpack($entity, $remote_properties = array()) {
     // Shadow data from local properties to remote ones.
-    // Get our properties.
+    // Get our properties. We get them from the wrapper rather than use
+    // entity_get_property_info() so that EntityDrupalWrapper::spotBundleInfo()
+    // can add/override properties from bundles. This allows bundle-specific
+    // property shadowing.
+    $wrapper = entity_metadata_wrapper($this->entityType, $entity);
+
     // TODO: consider moving this functionality out to a helper method.
-    $properties = entity_get_property_info($this->entityType);
-    $properties = $properties['properties'];
+    $properties = $wrapper->getPropertyInfo();
 
     // Intersect to reduce this to remote properties.
     if (empty($remote_properties)) {
@@ -394,6 +604,7 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
       $wrapper = entity_metadata_wrapper($this->entityType, $entity);
 
       foreach ($properties as $property_name => $property_info) {
+        // Invoke callback_remote_entity_property_info_shadow_property().
         if (isset($property_info['remote property shadowing']['local to remote callback'])) {
           $callback = $property_info['remote property shadowing']['local to remote callback'];
           $value = $callback($entity, $property_name, $this->entityType, $property_info, 'local to remote');
@@ -406,6 +617,13 @@ class RemoteEntityAPIDefaultController extends EntityAPIController implements En
           $wrapper->{$property_name}->set($value);
         }
       }
+    }
+
+    // Invoke callback_remote_entity_unpack() to allow the entity's module to
+    // set properties on the remote data before we save it.
+    if (isset($this->entityInfo['remote entity unpack callback'])) {
+      $callback = $this->entityInfo['remote entity unpack callback'];
+      $callback($this->entityType, $entity);
     }
   }
 

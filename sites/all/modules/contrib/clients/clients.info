@@ -2,16 +2,19 @@ name = Clients
 description = Basic service management and API for Web Services clients
 core = 7.x
 package = Clients
+configure = admin/structure/clients
 dependencies[] = entity
+dependencies[] = ctools
 files[] = includes/clients.connection.admin.inc
 files[] = includes/clients.entity.inc
 files[] = includes/clients.controller.inc
 files[] = includes/clients.ui.inc
 files[] = includes/clients.features.inc
+files[] = tests/clients.test
 
-; Information added by drupal.org packaging script on 2013-03-10
-version = "7.x-3.0-beta5"
+; Information added by Drupal.org packaging script on 2014-05-30
+version = "7.x-3.0-beta10"
 core = "7.x"
 project = "clients"
-datestamp = "1362947115"
+datestamp = "1401463137"
 
