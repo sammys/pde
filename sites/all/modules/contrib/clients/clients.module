@@ -19,7 +19,7 @@
  *  The name of the component the resource is needed for.
  *
  * @return
- *  A resource handler entity.
+ *  A resource handler entity, or NULL if nothing is found.
  */
 function clients_resource_get_for_component($resource_type, $component_name) {
   $result = db_query("SELECT name FROM {clients_resource} WHERE type = :type AND component = :component", array(
@@ -27,7 +27,12 @@ function clients_resource_get_for_component($resource_type, $component_name) {
     ':component' => $component_name,
   ));
   $name = $result->fetchField();
-  return clients_resource_load($name);
+
+  // During _entity_defaults_rebuild() it's possible for the resource to not
+  // yet exist.
+  if (!empty($name)) {
+    return clients_resource_load($name);
+  }
 }
 
 /**
@@ -158,6 +163,120 @@ function clients_connection_call($connection_name, $method) {
   return $return;
 }
 
+/**
+ * Load a connection object which can then be used to make method calls.
+ *
+ * If the 'environment_name' variable is set, this will try to load a connection
+ * with the environment name appended to the connection name. This allows the
+ * the use of connections to development services on a development site.
+ *
+ * Because of the extra overhead in first trying to load the connection with the
+ * suffix, it is advisable to not set the 'environment_name' variable on a
+ * production site.
+ *
+ * @param $connection_name
+ *  A connection machine name.
+ *
+ * @return
+ *  A fully loaded connection handler object. If there is a problem, such as
+ *  the machine name or connection type not existing, a connection of the class
+ *  defined for broken handlers in hook_entity_info() is returned.
+ */
+function clients_connection_load($connection_name) {
+  // If the the local environment is set and not 'production', we look for an
+  // environment-specific connection.
+  $environment_name = variable_get('environment_name', NULL);
+  if (isset($environment_name) && $environment_name != 'production') {
+    // Append the environment name to the connection name, and try to load
+    // that connection instead.
+    $connection_name_environment = $connection_name . '_' . $environment_name;
+    if ($connection = entity_load_single('clients_connection', $connection_name_environment)) {
+      return $connection;
+    }
+  }
+
+  return entity_load_single('clients_connection', $connection_name);
+}
+
+/**
+ * Get the name of the connection that is being substituted for.
+ *
+ * @param $connection_name
+ *  The name of a connection in use.
+ *
+ * @return
+ *  If the given connection is being used as an environment substitute for
+ *  another, then the name of the inactive connection which is being replaced.
+ *  For example, given 'connection_dev' in the 'dev' environment, this returns
+ *  'connection'. If no connection substitution is occurring, the given name
+ *  is returned unchanged.
+ */
+function clients_connection_get_substituted_name($connection_name) {
+  $environment_name = variable_get('environment_name', NULL);
+  if (substr($connection_name, -1 * strlen($environment_name)) == $environment_name) {
+    $original_connection_name = substr($connection_name, 0, -1 * (strlen($environment_name) + 1));
+    if ($original_connection = entity_load_single('clients_connection', $original_connection_name)) {
+      return $original_connection->name;
+    }
+  }
+  return $connection_name;
+}
+
+/**
+ * Load all connections.
+ *
+ * TODO! @param $types
+ *  (optional) Specify a single type or a list of types to include.
+ *  If omitted, all are returned.
+ * @return
+ *  An array of connection objects, keyed by name.
+ */
+function clients_connection_load_all($types = array()) {
+  $connections = entity_load_multiple_by_name('clients_connection', FALSE);
+
+  // We generally want connections ordered by machine name.
+  ksort($connections);
+
+  return $connections;
+}
+
+/**
+ * Get a list of all connection types.
+ *
+ * @param $type
+ *  (Optional) The name of a single type to return a definition for. If omitted,
+ *  all definitions are returned.
+ *
+ * @return
+ *  An array of connection type definitions, keyed by machine name.
+ *
+ * @see hook_clients_connection_type_info()
+ */
+function clients_get_connection_types($type = NULL) {
+  $connection_types = &drupal_static(__FUNCTION__);
+  if (!isset($connection_types)) {
+    if ($cache = cache_get('clients_connection_type_info')) {
+      $connection_types = $cache->data;
+    }
+    else {
+      // Invoke hook_clients_connection_type_info().
+      $connection_types = module_invoke_all('clients_connection_type_info');
+      drupal_alter('clients_connection_type_info', $connection_types);
+
+      cache_set('clients_connection_type_info', $connection_types);
+    }
+  }
+
+  if (isset($type)) {
+    if (isset($connection_types[$type])) {
+      return $connection_types[$type];
+    }
+  }
+  else {
+    return $connection_types;
+  }
+}
+
 // ========================================== Core hook implementations
 
 /**
@@ -196,7 +315,7 @@ function clients_entity_info() {
   $return = array(
     'clients_connection' => array(
       'label' => t('Clients Connection'),
-      'controller class' => 'ClientsHandlerEntityController',
+      'controller class' => 'ClientsConnectionHandlerEntityController',
       'base table' => 'clients_connection',
       'uri callback' => 'clients_connection_uri',
       'fieldable' => FALSE,
@@ -348,76 +467,6 @@ function clients_flush_caches() {
   return array('cache_clients');
 }
 
-/**
- * Load a connection object which can then be used to make method calls.
- *
- * @param $name
- *  A connection machine name.
- *
- * @return
- *  A fully loaded connection handler object. If there is a problem, such as
- *  the machine name or connection type not existing, a connection of the class
- *  defined for broken handlers in hook_entity_info() is returned.
- */
-function clients_connection_load($name) {
-  return entity_load_single('clients_connection', $name);
-}
-
-/**
- * Load all connections.
- *
- * TODO! @param $types
- *  (optional) Specify a single type or a list of types to include.
- *  If omitted, all are returned.
- * @return
- *  An array of connection objects, keyed by name.
- */
-function clients_connection_load_all($types = array()) {
-  $connections = entity_load_multiple_by_name('clients_connection', FALSE);
-
-  // We generally want connections ordered by machine name.
-  ksort($connections);
-
-  return $connections;
-}
-
-/**
- * Get a list of all connection types.
- *
- * @param $type
- *  (Optional) The name of a single type to return a definition for. If omitted,
- *  all definitions are returned.
- *
- * @return
- *  An array of connection type definitions, keyed by machine name.
- *
- * @see hook_clients_connection_type_info()
- */
-function clients_get_connection_types($type = NULL) {
-  $connection_types = &drupal_static(__FUNCTION__);
-  if (!isset($connection_types)) {
-    if ($cache = cache_get('clients_connection_type_info')) {
-      $connection_types = $cache->data;
-    }
-    else {
-      // Invoke hook_clients_connection_type_info().
-      $connection_types = module_invoke_all('clients_connection_type_info');
-      drupal_alter('clients_connection_type_info', $connection_types);
-
-      cache_set('clients_connection_type_info', $connection_types);
-    }
-  }
-
-  if (isset($type)) {
-    if (isset($connection_types[$type])) {
-      return $connection_types[$type];
-    }
-  }
-  else {
-    return $connection_types;
-  }
-}
-
 // Entity API callbacks.
 
 /**
@@ -429,6 +478,27 @@ function clients_resource_uri($resource) {
   return array(
     'path' => 'admin/structure/clients/resources/manage/' . $resource->name,
   );
+}
+
+// ================================================ CTools plugins
+
+/**
+ * Implements hook_ctools_plugin_type().
+ */
+function clients_ctools_plugin_type() {
+  $plugins['clients_credentials_storage'] = array(
+  );
+
+  return $plugins;
+}
+
+/**
+ * Implements hook_ctools_plugin_directory().
+ */
+function clients_ctools_plugin_directory($owner, $plugin_type) {
+  if ($owner == 'clients') {
+    return "plugins/$plugin_type";
+  }
 }
 
 // ================================================ Misc helpers

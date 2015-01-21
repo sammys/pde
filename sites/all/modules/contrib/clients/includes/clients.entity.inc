@@ -63,7 +63,50 @@ abstract class clients_connection_base extends ClientsHandlerEntity {
    */
   public $configuration;
 
+  /**
+   * Declare an array of properties which should be treated as credentials.
+   *
+   * This lets the credentials storage plugin know which configuration
+   * properties to take care of.
+   *
+   * @return
+   *  A flat array of property names.
+   */
+  function credentialsProperties() {
+    return array();
+  }
+
   // ============================================ Connection UI
+
+  /**
+   * Get the credentials storage plugin for this connection.
+   *
+   * @param $plugin_id
+   *  (Optional) The id of the plugin to retrieve. Specifying this allows the
+   *  loading of the old plugin during connection form save.
+   *
+   * @return
+   *  The instantiated plugin handler.
+   */
+  function get_credentials_storage_plugin($plugin_id = NULL) {
+    if (!isset($plugin_id)) {
+      if (isset($this->configuration['credentials_storage'])) {
+        $plugin_id = $this->configuration['credentials_storage'];
+      }
+      else {
+        // Fallback to the connection configuration plugin by default. This also
+        // ensures backward compatibility.
+        $plugin_id = 'connection_configuration';
+      }
+    }
+
+    // Get the credentials storage plugin.
+    ctools_include('plugins');
+    $storage_plugin = ctools_get_plugins('clients', 'clients_credentials_storage', $plugin_id);
+    $class = ctools_plugin_get_class($storage_plugin, 'handler');
+
+    return new $class();
+  }
 
   /**
    * Format the connection's endpoint as a link.
@@ -108,7 +151,7 @@ abstract class clients_connection_base extends ClientsHandlerEntity {
    */
   function connectionSettingsForm_submit($form, &$form_state) {
     // Check there is a password form element.
-    if (isset($form['configuration']['password'])) {
+    if (isset($form['credentials']['password'])) {
       $old_connection = $form['#connection'];
 
       // Check whether we're editing or adding a new connection.
@@ -118,8 +161,11 @@ abstract class clients_connection_base extends ClientsHandlerEntity {
       }
       else {
         // Set password to original if blank.
-        if (empty($form_state['values']['configuration']['password'])) {
-          $this->configuration['password'] = $old_connection->configuration['password'];
+        if (empty($form_state['values']['credentials']['password'])) {
+          // Load the old credentials into the old connection, then copy the
+          // password into the new one.
+          $old_connection->credentialsLoad();
+          $this->credentials['password'] = $old_connection->credentials['password'];
         }
         // Encryption disabled for now. TODO
         //$form_state['values']['configuration']['password'] = clients_drupal_encrypt($form_state['values']['configuration']['password']);
@@ -131,6 +177,20 @@ abstract class clients_connection_base extends ClientsHandlerEntity {
   }
 
   // ============================================ Connection API.
+
+  /**
+   * Load the credentials into the connection.
+   *
+   * The credentials are loaded to a $connection->credentials array.
+   *
+   * Note that we don't call this in __construct() because then they would be
+   * exported, which defeats the purpose.
+   */
+  function credentialsLoad() {
+    $credentials_storage_plugin = $this->get_credentials_storage_plugin();
+    $credentials_storage_plugin->credentialsLoad($this);
+  }
+
   // TODO: move these to an XMLRPC client interface.
 
   /**
@@ -185,6 +245,63 @@ abstract class clients_connection_base extends ClientsHandlerEntity {
    */
   function callMethodArray($method, $method_params = array()) {
     // Up to subclasses to override this to do something.
+  }
+
+  /**
+   * Output debugging data.
+   *
+   * This outputs debugging data if the connection is set to debug mode.
+   *
+   * The following channels are available:
+   *  - watchdog: The usual Drupal core watchdog. This may not be suitable for
+   *      large data.
+   *  - dd: Devel module's dd() function.
+   *  - dpm: Devel module's dpm() function.
+   *  - ddl: Devel Debug Log module's ddl() function.
+   *
+   * The channels used can be overridden by defining an array of the above names
+   * as keys in the site variable 'clients_debug_channels'.
+   *
+   * @param $data
+   *  The data to output, such as the request data.
+   * @param $variables = array()
+   *  An array of variables for passing to watchdog(), if that output channel is
+   *  used.
+   */
+  function debug($data, $variables = array()) {
+    // Bail if we're not set to debug mode.
+    if (empty($this->configuration['debug'])) {
+      return;
+    }
+
+    // Get the channels we output debug data to.
+    // Statically cache this, as we'll likely come here several times in one
+    // connection request.
+    static $clients_debug_channels;
+    if (!isset($clients_debug_channels)) {
+      $clients_debug_channels = variable_get('clients_debug_channels', array(
+        'watchdog'  => TRUE,
+        'dpm'       => module_exists('devel'),
+        'ddl'       => module_exists('devel_debug_log'),
+      ));
+    }
+
+    // Drupal core watchdog().
+    if (isset($clients_debug_channels['watchdog'])) {
+      watchdog(get_class($this), $data, $variables, WATCHDOG_DEBUG);
+    }
+    // Devel dpm().
+    if (isset($clients_debug_channels['dpm'])) {
+      dpm($data, get_class($this));
+    }
+    // Devel dd().
+    if (isset($clients_debug_channels['dd'])) {
+      dd($data);
+    }
+    // Devel debug log ddl().
+    if (isset($clients_debug_channels['dd'])) {
+      ddl($data, get_class($this));
+    }
   }
 
 }

@@ -3,9 +3,9 @@ description = Provides a field type that refers to remote entities by their remo
 core = 7.x
 dependencies[] = remote_entity
 
-; Information added by drupal.org packaging script on 2013-04-24
-version = "7.x-1.0-alpha7+5-dev"
+; Information added by Drupal.org packaging script on 2014-08-26
+version = "7.x-1.0-beta6"
 core = "7.x"
 project = "remote_entity"
-datestamp = "1366766250"
+datestamp = "1409056733"
 

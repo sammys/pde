@@ -40,7 +40,7 @@ abstract class RemoteEntityQuery {
    *  Constructor: sets the connection.
    *
    * @param $connection
-   *  A connection of type clients_connection_ms_dynamics_soap.
+   *  The connection handler to use with this query.
    */
   function __construct($connection) {
     $this->connection = $connection;
@@ -63,9 +63,59 @@ abstract class RemoteEntityQuery {
 }
 
 /**
+ * Abstract class to hold methods and properties common to select queries.
+ */
+abstract class RemoteEntitySelectQuery extends RemoteEntityQuery {
+
+  /**
+   * An array of conditions on the query. These are grouped by the table they
+   * are on.
+   */
+  public $conditions = array();
+
+  /**
+   * Build the query from an EntityFieldQuery object.
+   *
+   * If you'd like Views to do the remote querying, you'll need to implement
+   * this.  Otherwise, Views will only search through locally cached data.
+   *
+   * Converts an EntityFieldQuery object (through the EntityFieldQuery Views
+   * module) into a ready-to-be-executed RemoteEntitySelectQuery.
+   *
+   * @param $efq
+   *   The built-up EntityFieldQuery object.
+   *
+   * @return
+   *   The current object.  Helpful for chaining methods.
+   *
+   * @todo Copy everthing from the EntityFieldQuery object, not just one set of
+   *   conditions.
+   */
+  function buildFromEFQ($efq) {
+
+    // Copy each of the property conditions.
+    foreach ($efq->propertyConditions as $condition) {
+      $this->conditions[$this->remote_base][] = array(
+        'field' => $condition['column'],
+        'value' => $condition['value'],
+        'operator' => isset($condition['operator']) ? $condition['operator'] : NULL,
+      );
+    }
+
+    return $this;
+  }
+
+}
+
+/**
  * Abstract class to hold methods common to insert and update queries.
  */
 abstract class RemoteEntitySaveQuery extends RemoteEntityQuery {
+
+  /**
+   * The table info from remote_entity_get_query_table_info().
+   */
+  public $table_info;
 
   /**
    * The entity to insert or update.
@@ -73,9 +123,26 @@ abstract class RemoteEntitySaveQuery extends RemoteEntityQuery {
   public $entity;
 
   /**
+   * Constructor.
+   *
+   * @param $connection
+   *  The connection handler to use with this query.
+   */
+  function __construct($connection) {
+    parent::__construct($connection);
+
+    $this->table_info = remote_entity_get_query_table_info($connection->name);
+  }
+
+  /**
    * Set the entity to save.
    *
    * This takes care of calling base().
+   *
+   * @param $entity_type
+   *  The entity type.
+   * @param $entity
+   *  The entity to save.
    */
   function setEntity($entity_type, $entity) {
     $this->base($entity_type);
@@ -134,3 +201,50 @@ abstract class RemoteEntityUpdateQuery extends RemoteEntitySaveQuery {
 
 }
 
+/**
+ * Abstract parent class for bulk save queries.
+ *
+ * Bulk save queries are expected to handle both insert and update operations.
+ */
+abstract class RemoteEntityBulkSaveQuery extends RemoteEntitySaveQuery {
+
+  /**
+   * An array of remote properties to send in an update.
+   *
+   * Implementing classes are not obliged to support this, and may instead opt
+   * to always send the entirety of the data.
+   */
+  protected $update_fields = array();
+
+  /**
+   * Set the entities to save.
+   *
+   * This takes care of calling base().
+   *
+   * @param $entity_type
+   *  The entity type.
+   * @param $entities
+   *  An array of entities to save, keyed by entity ID.
+   */
+  function setEntities($entity_type, $entities) {
+    $this->base($entity_type);
+
+    $this->entities = $entities;
+  }
+
+  /**
+   * Add multiple fields to update.
+   *
+   * @param $field_names
+   *  An array of the names of properties that map to fields on the remote
+   *  entity.
+   */
+  function addFields($field_names) {
+    $property_map = $this->entity_info['property map'];
+
+    foreach ($field_names as $field_name) {
+      $this->update_fields[] = $property_map[$field_name];
+    }
+  }
+
+}

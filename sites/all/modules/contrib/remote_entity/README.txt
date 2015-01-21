@@ -81,3 +81,18 @@ The following operations handlers are provided for use with the Entity Operation
 
 - remote devel: fetches the remote entity and outputs it using Devel module.
 - remote save: provides a form to remotely save the entity.
+
+Extras: Views
+-------------
+
+By default, only the locally-cached copies of remote entities are exposed to
+Views.  It is possible, however, for Views to do the remote querying.  To set
+that up, do the following:
+
+  1. Install the EntityFieldQuery Views Backend (efq_views) module.
+  2. Implement the buildFromEFQ() method in your select query class.  See the
+     method documentation in RemoteEntitySelectQuery::buildFromEFQ().
+
+Note: A current limitation is that remote properties must be identical to local
+  ones.  This is because EntityFieldQuery will only allow property conditions
+  to be set on properties it knows about.

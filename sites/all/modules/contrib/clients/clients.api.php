@@ -42,7 +42,8 @@ function clients_hook_entity_info() {
  *
  * @return array
  *   An array of information on the connection types implemented by a module,
- *   keyed by the machine-readable name for the type.
+ *   keyed by the machine-readable name for the type. The class for the
+ *   connection type is automatically of the form 'clients_connection_TYPE'.
  *   Each type is itself an array, with following keys:
  *     'label': the human-readable label.
  *     'description': (optional) A more detailed description of the type.
@@ -121,7 +122,20 @@ function hook_clients_resource_type_info() {
  * Used via EntityAPI exportables.
  */
 function hook_clients_default_connections() {
-
+  $items = array();
+  $items['my_connection'] = entity_import('clients_connection', '{
+    "name" : "my_connection",
+    "endpoint" : "https:\\/\\/example.com\\/services\\/",
+    "configuration" : {
+      "debug" : 0,
+      "credentials_storage" : "connection_configuration",
+      "username" : "user",
+      "password" : "password"
+    },
+    "label" : "My connection",
+    "type" : "drupal_services_rest_7"
+  }');
+  return $items;
 }
 
 /**

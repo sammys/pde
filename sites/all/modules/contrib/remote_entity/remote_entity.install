@@ -60,8 +60,10 @@ function remote_entity_schema_table($entity_type) {
         'not null' => TRUE,
         'default' => 0,
       ),
+      // @todo: for 2.x, rename this to 'remote_save_status'.
       'needs_remote_save' => array(
-        'description' => 'Boolean indicating that this entity should be saved remotely by cron.',
+        'description' => "Indicates this entity's status for remote saving. "
+          . "0: no save needed, 1: needs remote save, REMOTE_ENTITY_REMOTE_SAVE_FAILED: last remote save attempt failed.",
         'type' => 'int',
         'not null' => TRUE,
         'default' => 0,

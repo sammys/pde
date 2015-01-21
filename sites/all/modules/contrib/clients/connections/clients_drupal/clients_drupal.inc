@@ -18,10 +18,26 @@ class clients_connection_drupal_services extends clients_connection_base {
     parent::__construct($values, $entityType);
 
     // Decrypt the password.
-    $this->configuration['password'] = clients_drupal_decrypt($this->configuration['password']);
+    // TODO: move this to the loading of credentials.
+    // Though nothing uses this any more!!!
+    //$this->configuration['password'] = clients_drupal_decrypt($this->configuration['password']);
   }
 
   // ============================================ Base: Admin UI.
+
+  /**
+   * Declare an array of properties which should be treated as credentials.
+   *
+   * This lets the credentials storage plugin know which configuration
+   * properties to take care of.
+   *
+   * @return
+   *  A flat array of property names.
+   */
+  function credentialsProperties() {
+    return array('username', 'password');
+  }
+
   /**
    * Submit handler for saving/updating connections of this class.
    *
@@ -73,14 +89,8 @@ class clients_connection_drupal_services_7_3 extends clients_connection_drupal_s
   function connectionSettingsFormAlter(&$form, &$form_state) {
     $form['endpoint']['#description'] = t('Remote service URL e.g. http://mysite.com/path/to/xmlrpc');
 
-    $form['configuration'] += array(
-      '#type' => 'fieldset',
-      '#title' => t('Configuration'),
-      '#collapsible' => FALSE,
-      '#tree' => TRUE,
-    );
-
-    $form['configuration']['username'] = array(
+    // There is no configuration other than the credentials.
+    $form['credentials']['username'] = array(
       '#type' => 'textfield',
       '#title' => t('Service username'),
       '#size' => 30,
@@ -90,11 +100,11 @@ class clients_connection_drupal_services_7_3 extends clients_connection_drupal_s
       '#required' => TRUE,
     );
 
-    $password_exists = isset($this->configuration['password']);
+    $password_exists = isset($this->credentials['password']);
     $password_desc = $password_exists
       ? t('This should be same as the password on the server you are connecting to. Leave blank unless you need to change this.')
       : t('This should be same as the password on the server you are connecting to.');
-    $form['configuration']['password'] = array(
+    $form['credentials']['password'] = array(
       '#type' => 'password',
       '#title' => t('Service password'),
       '#size' => 30,
@@ -120,6 +130,8 @@ class clients_connection_drupal_services_7_3 extends clients_connection_drupal_s
    *  Whatever is returned from the remote site.
    */
   function callMethodArray($method, $method_params = array()) {
+    $this->method = $method;
+
     // Connect to the remote system service to get an initial session id to log in with.
     $connect = xmlrpc($this->endpoint, array(
       'system.connect' => array(),
@@ -133,8 +145,9 @@ class clients_connection_drupal_services_7_3 extends clients_connection_drupal_s
     }
 
     // Log in and get the user's session ID.
-    $username = $this->configuration['username'];
-    $password = $this->configuration['password'];
+    $this->credentialsLoad();
+    $username = $this->credentials['username'];
+    $password = $this->credentials['password'];
 
     $login = xmlrpc($this->endpoint, array(
       'user.login' => array(
@@ -143,6 +156,10 @@ class clients_connection_drupal_services_7_3 extends clients_connection_drupal_s
       ),
     ));
     $login_session_id = $login['sessid'];
+    $login_session_name = $login['session_name'];
+
+    // Set our cookie for subsequent requests.
+    $this->cookie = $login_session_name . '=' . $login_session_id;
 
     // If the requested method is user.login, we're done.
     if ($method == 'user.login') {
@@ -150,19 +167,73 @@ class clients_connection_drupal_services_7_3 extends clients_connection_drupal_s
       return $login;
     }
 
-    // Build the array of connection arguments for the method we want to call.
-    $xmlrpc_args = array_merge(
-      array($this->endpoint, $method),
-      $method_params
+    $headers = array(
+      // Pass in the login cookie we received previously.
+      'Cookie' => $this->cookie,
+      // It would appear that with XMLRPC we always need the XCSRF token, no
+      // matter what the method.
+      'X-CSRF-Token' => $this->getXCSRFToken(),
+    );
+    $xmlrpc_options = array(
+      'headers' => $headers,
     );
 
-    // Call the xmlrpc method with our array of arguments.
-    $result = call_user_func_array('xmlrpc', $xmlrpc_args);
+    $result = xmlrpc($this->endpoint, array(
+        $method => $method_params,
+      ),
+      $xmlrpc_options
+    );
 
     // Throw an exception for errors from the remote call.
     $this->handleXmlrpcError();
 
     return $result;
+  }
+
+  /**
+   * Get the X-CSRF token.
+   *
+   * This calls the remote site to get the token, and caches it, so that
+   * multiple requests made with the same connection don't need to retrieve it
+   * again.
+   *
+   * This expects the 'user.token' method to be enabled on the
+   * endpoint. This only exists in Services 3.5 and later. We do not support
+   * earlier versions.
+   *
+   * @return
+   *  The X-CSRF token.
+   *
+   * @throws
+   *  An exception if the remote site does not return a token.
+   */
+  function getXCSRFToken() {
+    if (isset($this->CSRFToken)) {
+      return $this->CSRFToken;
+    }
+
+    $headers = array(
+      // Pass in the login cookie we received previously.
+      'Cookie' => $this->cookie,
+    );
+
+    $options = array(
+      'headers' => $headers,
+    );
+
+    $response = xmlrpc($this->endpoint, array(
+      'user.token' => array(),
+    ), $options);
+
+    $this->handleXmlrpcError();
+
+    if (isset($response['token'])) {
+      $this->CSRFToken = $response['token'];
+      return $this->CSRFToken;
+    }
+    else {
+      throw new Exception(t("Unable to get a CSRF token from the remote site."));
+    }
   }
 
 }
@@ -215,7 +286,8 @@ class clients_connection_drupal_services_6_2 extends clients_connection_drupal_s
       '#description' => t('This should be same as the \'Key\' field used by the Services authentication key on the server you are connecting to.'),
       '#required' => TRUE,
     );
-    $form['configuration']['username'] = array(
+
+    $form['credentials']['username'] = array(
       '#type' => 'textfield',
       '#title' => t('Service username'),
       '#size' => 30,
@@ -225,11 +297,11 @@ class clients_connection_drupal_services_6_2 extends clients_connection_drupal_s
       '#required' => TRUE,
     );
 
-    $password_exists = isset($this->configuration['password']);
+    $password_exists = isset($this->credentials['password']);
     $password_desc = $password_exists
       ? t('This should be same as the password on the server you are connecting to. Leave blank unless you need to change this.')
       : t('This should be same as the password on the server you are connecting to.');
-    $form['configuration']['password'] = array(
+    $form['credentials']['password'] = array(
       '#type' => 'password',
       '#title' => t('Service password'),
       '#size' => 30,
@@ -277,8 +349,9 @@ class clients_connection_drupal_services_6_2 extends clients_connection_drupal_s
     //dsm($key_args);
 
     // Build the array of connection arguments we need to log in.
-    $username = $this->configuration['username'];
-    $password = $this->configuration['password'];
+    $this->credentialsLoad();
+    $username = $this->credentials['username'];
+    $password = $this->credentials['password'];
 
     // Call the xmlrpc method with our array of arguments. This accounts for
     // whether we use a key or not, and the extra parameters to pass to the method.

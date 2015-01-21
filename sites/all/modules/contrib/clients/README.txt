@@ -29,6 +29,28 @@ There are two ways to use a connection:
   block hooks, and caching retrieved results. The remote block provided would
   function exactly like a normal, local block.
 
+Connection substitution
+=======================
+
+It's possible to have the same connection machine name load different
+connections depending on the site's environment. This is based on the value of
+the 'environment_name' site variable. When loading a connection, the environment
+name as defined by this variable is appended to the requested connection name,
+and if this results in the name of another connection, that is loaded instead.
+
+This allows a development site to connect to a development version of a service
+without any changes in code.
+
+For example:
+
+// Just loads the foobar connection.
+$connection = clients_connection_load('foobar');
+
+variable_set('environment_name', 'dev');
+// Loads the foobar_dev instead, if it exists. Otherwise, loads foobar.
+$connection = clients_connection_load('foobar');
+
+
 Using connections directly
 ==========================
 
@@ -68,6 +90,23 @@ If you need to make several calls, you can use the connection object yourself:
   catch (Exception $e) {
     drupal_set_message("Error calling method.name.");
   }
+
+Debugging mode
+==============
+
+Each connections may have a debug mode flag set. Note that at this time not all
+connection types support this (and may thus simply not provide any output).
+
+Debug output may be sent to the following channels:
+
+  - watchdog: The usual Drupal core watchdog. This may not be suitable for
+      large data.
+  - dpm: Devel module's dpm() function.
+  - ddl: Devel Debug Log module's ddl() function.
+  - dd: (Not used by default) Devel module's dd() function.
+
+The channels used can be overridden by defining an array of the above names
+as keys in the site variable 'clients_debug_channels'.
 
 Extending the testing system
 ===========================

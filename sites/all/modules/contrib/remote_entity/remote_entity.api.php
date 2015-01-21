@@ -32,6 +32,10 @@
  *      form, in the format 'button_name' => TRUE. Possible button names are:
  *      - 'fetch': Show a button to fetch all remote entities. (Only use this
  *        when you know the number of remote entities is relatively small!)
+ * - 'entity keys': The following additional keys are used by the Remote Entity
+ *   API:
+ *    - 'needs remote save': (optional) The key of the entity property holding
+ *      the boolean flag that marks the entity as needing to be saved remotely.
  *
  * The remote entity API supports the following keys:
  *
@@ -69,6 +73,17 @@
  *    remote properties from the remote entity data when it is loaded from
  *    the remote source. For example, the controller by default extracts the
  *    remote ID and places it in the entity's 'remote_id' property.
+ *  - 'bundles': Within a bundle info array, the following extra properties are
+ *    supported:
+ *    - 'remote entity conditions': (optional) An array of conditions to apply
+ *      when a remote entity is being packed on initial retrieval, to determine
+ *      which bundle to use for the local entity. This is only required if the
+ *      entity type has bundles, and will be queried for remotely. Furthermore,
+ *      only bundles that will be queried for need this. Each condition in the
+ *      array has as its key the name of a remote property (i.e. a property on
+ *      the remote data as retrieved) and its value a value to match for that
+ *      property. Entity types needing more complicated logic should override
+ *      the getNewEntityBundle() method.
  *
  * @see hook_entity_info()
  * @see entity_crud_hook_entity_info()
@@ -100,8 +115,21 @@ function remote_entity_hook_entity_info() {
  *          callback_remote_entity_property_info_shadow_property(), which is
  *          responsible for copying data from the remote mapped property to
  *          Drupal local properties.
+ *        - 'local property': If the callback specified for either direction is
+ *          remote_entity_shadowing_schema_property_verbatim_named(), this must
+ *          specify the name of a local property on the entity, whose value is
+ *          copied to and from the remote property.
  *        Since the same callback signature is used for both callbacks, it is
- *        possible to use the same function, but this is not necessary.
+ *        possible to use the same function, but this is not necessary. If this
+ *        is set on a bundle-level property, then it overrides the same item on
+ *        the entity-level property. For example:
+ *        @code
+ *        $info['entitytype']['bundles']['bundle']['properties']['foo']['remote property shadowing]...
+ *        $info['entitytype']['properties']['foo']['remote property shadowing]...
+ *        @endcode
+ *
+ * @see remote_entity_shadowing_schema_property_verbatim()
+ * @see remote_entity_shadowing_schema_property_verbatim_named()
  */
 function remote_entity_hook_entity_property_info() {
 
@@ -144,6 +172,7 @@ function hook_remote_entity_process($entities, $entity_type) {
  *  - 'relationships': The contents of this depend on the connection type.
  *
  * @see remote_entity_get_query_table_info()
+ * @see hook_remote_entity_query_table_info_alter()
  */
 function hook_remote_entity_query_table_info() {
   $data = array(
@@ -184,6 +213,18 @@ function hook_remote_entity_query_table_info() {
   );
 
   return $data;
+}
+
+/**
+ * Alter information about remote tables for RemoteEntityQuery.
+ *
+ * @param $table_data
+ *  The table data from other modules.
+ *
+ * @see remote_entity_get_query_table_info()
+ * @see hook_remote_entity_query_table_info()
+ */
+function hook_remote_entity_query_table_info_alter(&$table_data) {
 }
 
 /**
